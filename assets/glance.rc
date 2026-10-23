@@ -1,0 +1,8 @@
+#define RT_MANIFEST 24
+
+// Ordinals are used by src/tray.rs (tray icons) and the shell (first icon = exe icon).
+1 ICON "glance.ico"
+2 ICON "tray-dark.ico"
+3 ICON "tray-light.ico"
+
+1 RT_MANIFEST "glance.exe.manifest"

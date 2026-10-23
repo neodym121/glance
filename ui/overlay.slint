@@ -1,0 +1,186 @@
+// Full-screen capture overlay, one per monitor. It draws the frozen frame captured
+// before the window appeared; the crop is taken from that frame in Rust, so nothing
+// drawn here (dimming, guides, hint) can end up in the recognized image.
+//
+// The software renderer repaints only what changed. The backdrop is a pre-dimmed copy
+// of the frame and the selection shows the original on top of it, so a mouse move
+// repaints the two guide lines and, while dragging, the selection rectangle; geometry
+// that depends on the pointer must not span the whole screen.
+
+import { Theme } from "theme.slint";
+import { Keycap } from "components.slint";
+
+export component OverlayWindow inherits Window {
+    in property <image> frame;
+    // The same frame at half brightness (made in capture.rs).
+    in property <image> dimmed;
+    // Cursor position when the overlay opened, in logical px; negative when the
+    // cursor is on another monitor. Used until the first mouse move arrives.
+    in property <length> start-x: -1px;
+    in property <length> start-y: -1px;
+
+    callback cancel();
+    callback selected(/* x */ length, /* y */ length, /* width */ length, /* height */ length);
+
+    title: "Glance capture";
+    no-frame: true;
+    always-on-top: true;
+    background: black;
+    default-font-family: Theme.font-family;
+    forward-focus: keys;
+
+    property <bool> dragging: false;
+    property <bool> mouse-seen: false;
+    property <length> anchor-x;
+    property <length> anchor-y;
+
+    property <bool> pointer-here: ta.has-hover || root.dragging;
+    property <length> cx: root.pointer-here ? ta.mouse-x : root.start-x;
+    property <length> cy: root.pointer-here ? ta.mouse-y : root.start-y;
+    property <length> px: max(0px, min(root.cx, root.width - 1phx));
+    property <length> py: max(0px, min(root.cy, root.height - 1phx));
+    property <bool> show-guides: root.pointer-here || (!root.mouse-seen && root.start-x >= 0px);
+
+    property <length> sel-x: root.dragging ? min(root.anchor-x, root.px) : root.px;
+    property <length> sel-y: root.dragging ? min(root.anchor-y, root.py) : root.py;
+    property <length> sel-w: root.dragging ? abs(root.px - root.anchor-x) : 0px;
+    property <length> sel-h: root.dragging ? abs(root.py - root.anchor-y) : 0px;
+
+    Image {
+        width: 100%;
+        height: 100%;
+        source: root.dimmed;
+        image-fit: fill;
+        image-rendering: pixelated;
+    }
+
+    // The selection at full brightness: the matching piece of the original frame.
+    if root.dragging && root.sel-w > 0 && root.sel-h > 0: Image {
+        x: root.sel-x;
+        y: root.sel-y;
+        width: root.sel-w;
+        height: root.sel-h;
+        source: root.frame;
+        source-clip-x: round(root.sel-x / 1phx);
+        source-clip-y: round(root.sel-y / 1phx);
+        source-clip-width: round(root.sel-w / 1phx);
+        source-clip-height: round(root.sel-h / 1phx);
+        image-fit: fill;
+        image-rendering: pixelated;
+    }
+
+    if root.show-guides: Rectangle {
+        x: root.px;
+        y: 0;
+        width: 1phx;
+        height: root.height;
+        background: Theme.crosshair;
+    }
+
+    if root.show-guides: Rectangle {
+        x: 0;
+        y: root.py;
+        width: root.width;
+        height: 1phx;
+        background: Theme.crosshair;
+    }
+
+    if root.dragging && root.sel-w > 0 && root.sel-h > 0: Rectangle {
+        x: root.sel-x - 1phx;
+        y: root.sel-y - 1phx;
+        width: root.sel-w + 2phx;
+        height: root.sel-h + 2phx;
+        border-width: 1phx;
+        border-color: Theme.selection-edge;
+    }
+
+    // Selection size in physical pixels, above the selection (below it near the top edge).
+    if root.dragging && root.sel-w > 0 && root.sel-h > 0: Rectangle {
+        x: max(0px, min(root.sel-x, root.width - self.width));
+        y: root.sel-y >= 26px ? root.sel-y - 24px : root.sel-y + root.sel-h + 6px;
+        width: size-text.preferred-width + 12px;
+        height: 18px;
+        border-radius: Theme.radius-sm;
+        background: #161616e6;
+        border-width: 1px;
+        border-color: Theme.hairline;
+
+        size-text := Text {
+            text: round(root.sel-w / 1phx) + " × " + round(root.sel-h / 1phx);
+            color: Theme.silver;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-strong;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+
+    if !root.dragging: Rectangle {
+        x: (root.width - self.width) / 2;
+        y: root.height - self.height - 72px;
+        width: hint.preferred-width;
+        height: 32px;
+        border-radius: Theme.radius-md;
+        background: #161616eb;
+        border-width: 1px;
+        border-color: Theme.raised-rim;
+
+        hint := HorizontalLayout {
+            padding-left: 10px;
+            padding-right: 12px;
+            spacing: 8px;
+
+            VerticalLayout {
+                alignment: center;
+                Keycap {
+                    text: "Esc";
+                }
+            }
+
+            Text {
+                text: @tr("to cancel");
+                color: Theme.silver;
+                font-size: Theme.text-body;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.cancel();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: crosshair;
+        changed has-hover => {
+            root.mouse-seen = true;
+        }
+        pointer-event(event) => {
+            if (event.button == PointerEventButton.right && event.kind == PointerEventKind.down) {
+                root.dragging = false;
+                root.cancel();
+            } else if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                root.mouse-seen = true;
+                root.anchor-x = max(0px, min(self.mouse-x, root.width));
+                root.anchor-y = max(0px, min(self.mouse-y, root.height));
+                root.dragging = true;
+            } else if (event.button == PointerEventButton.left && event.kind == PointerEventKind.up && root.dragging) {
+                // Read the rectangle before `dragging` resets it.
+                let x = root.sel-x;
+                let y = root.sel-y;
+                let w = root.sel-w;
+                let h = root.sel-h;
+                root.dragging = false;
+                if (w >= 3phx && h >= 3phx) {
+                    root.selected(x, y, w, h);
+                }
+            }
+        }
+    }
+}

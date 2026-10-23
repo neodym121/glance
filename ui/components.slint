@@ -1,0 +1,703 @@
+// Controls styled after media/DESIGN.md. Every user-visible string goes through @tr()
+// so a Russian translation can be added later without touching the layout.
+
+import { Theme } from "theme.slint";
+
+// Editing shortcuts by physical key: Slint matches Ctrl+V by the typed character, which
+// fails on Cyrillic layouts ("м"). Rust maps an event to "copy", "cut", "paste",
+// "select-all" or "".
+export global EditKeys {
+    pure callback action(/* text */ string, /* ctrl */ bool, /* shift */ bool) -> string;
+}
+
+export component Icon inherits Image {
+    in property <brush> tint: Theme.pale-steel;
+    width: 16px;
+    height: 16px;
+    colorize: tint;
+}
+
+export enum ButtonKind { neutral, contrast, ghost, ghost-muted, danger }
+
+export component Button {
+    in property <string> text;
+    in property <image> icon;
+    in property <ButtonKind> kind: ButtonKind.neutral;
+    in property <bool> small: false;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    property <bool> flat: kind == ButtonKind.ghost || kind == ButtonKind.ghost-muted;
+    property <length> radius: small ? Theme.radius-sm : Theme.radius-md;
+    property <bool> keyboard-focus: false;
+
+    min-height: small ? 24px : 28px;
+    max-height: self.min-height;
+    min-width: layout.min-width;
+    preferred-width: layout.preferred-width;
+    horizontal-stretch: 0;
+    opacity: enabled ? 1 : 0.5;
+
+    accessible-role: button;
+    accessible-label: text;
+    accessible-enabled: enabled;
+    accessible-action-default => {
+        if (root.enabled) {
+            root.clicked();
+        }
+    }
+
+    fs := FocusScope {
+        enabled: root.enabled;
+        focus-on-click: false;
+        focus-gained(reason) => {
+            root.keyboard-focus = reason == FocusReason.tab-navigation;
+        }
+        focus-lost(reason) => {
+            root.keyboard-focus = false;
+        }
+        key-pressed(event) => {
+            if (event.text == " " || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    Rectangle {
+        border-radius: root.radius;
+        background: root.kind == ButtonKind.contrast ? Theme.lead : root.flat ? transparent : Theme.smoke-glass;
+        border-width: root.flat ? 0 : 1px;
+        border-color: root.kind == ButtonKind.contrast ? #ffffff4d : Theme.ring;
+
+        if root.kind == ButtonKind.contrast: Rectangle {
+            border-radius: root.radius;
+            background: @linear-gradient(180deg, #ffffff33 0%, #ffffff00 100%);
+        }
+
+        Rectangle {
+            border-radius: root.radius;
+            background: !root.enabled ? transparent
+                : ta.pressed ? (root.kind == ButtonKind.contrast ? #00000066 : Theme.pressed)
+                : ta.has-hover ? (root.kind == ButtonKind.contrast ? #0000003d : Theme.smoke-glass)
+                : transparent;
+        }
+    }
+
+    if fs.has-focus && root.keyboard-focus: Rectangle {
+        x: -3px;
+        y: -3px;
+        width: root.width + 6px;
+        height: root.height + 6px;
+        border-radius: root.radius + 3px;
+        border-width: 2px;
+        border-color: Theme.periwinkle;
+    }
+
+    layout := HorizontalLayout {
+        padding-left: root.small ? 9px : 11px;
+        padding-right: self.padding-left;
+        spacing: 6px;
+        alignment: center;
+
+        if root.icon.width > 0: VerticalLayout {
+            alignment: center;
+            Icon {
+                source: root.icon;
+                tint: root.kind == ButtonKind.ghost-muted ? (ta.pressed ? Theme.pale-steel : Theme.fog) : Theme.pale-steel;
+            }
+        }
+
+        if root.text != "": Text {
+            text: root.text;
+            vertical-alignment: center;
+            font-size: Theme.text-body;
+            font-weight: Theme.weight-strong;
+            letter-spacing: -0.04px;
+            color: root.kind == ButtonKind.contrast ? Theme.flash-white
+                : root.kind == ButtonKind.ghost-muted ? Theme.silver
+                : root.kind == ButtonKind.danger ? Theme.coral
+                : Theme.chalk;
+        }
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component Switch {
+    in-out property <bool> checked;
+    in property <bool> enabled: true;
+    in property <string> label;
+    callback toggled(bool);
+
+    property <bool> keyboard-focus: false;
+
+    width: 24px;
+    height: 16px;
+    opacity: enabled ? 1 : 0.5;
+
+    accessible-role: switch;
+    accessible-label: label;
+    accessible-checkable: true;
+    accessible-checked: checked;
+    accessible-action-default => {
+        root.flip();
+    }
+
+    function flip() {
+        if (root.enabled) {
+            root.checked = !root.checked;
+            root.toggled(root.checked);
+        }
+    }
+
+    fs := FocusScope {
+        enabled: root.enabled;
+        focus-on-click: false;
+        focus-gained(reason) => {
+            root.keyboard-focus = reason == FocusReason.tab-navigation;
+        }
+        focus-lost(reason) => {
+            root.keyboard-focus = false;
+        }
+        key-pressed(event) => {
+            if (event.text == " " || event.text == Key.Return) {
+                root.flip();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    Rectangle {
+        border-radius: Theme.radius-sm;
+        background: root.checked ? Theme.cobalt : Theme.lead;
+        animate background { duration: 90ms; easing: ease-out; }
+        border-width: 1px;
+        border-color: #ffffff1c;
+
+        Rectangle {
+            border-radius: Theme.radius-sm;
+            background: @linear-gradient(180deg, #ffffff00 0%, root.checked ? #ffffff1a : #ffffff33 100%);
+        }
+
+        Rectangle {
+            y: 2px;
+            width: ta.has-hover && root.enabled ? 13px : 12px;
+            height: 12px;
+            x: root.checked ? parent.width - self.width - 2px : 2px;
+            animate x, width { duration: 90ms; easing: ease-out; }
+            border-radius: Theme.radius-xs;
+            background: root.checked ? #eeeeee : #f2f2f2;
+            border-width: 1px;
+            border-color: #ffffff;
+            drop-shadow-color: #00000066;
+            drop-shadow-offset-y: 0.5px;
+            drop-shadow-blur: 1px;
+        }
+    }
+
+    if fs.has-focus && root.keyboard-focus: Rectangle {
+        x: -3px;
+        y: -3px;
+        width: root.width + 6px;
+        height: root.height + 6px;
+        border-radius: Theme.radius-sm + 3px;
+        border-width: 2px;
+        border-color: Theme.periwinkle;
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.flip();
+        }
+    }
+}
+
+export component TextField {
+    in-out property <string> text;
+    in property <string> placeholder;
+    in property <bool> password: false;
+    in property <bool> mono: false;
+    in property <bool> enabled: true;
+    // Optional glyph at the start, e.g. a magnifier in a search field.
+    in property <image> icon;
+    callback edited(string);
+    callback accepted(string);
+
+    property <length> text-left: root.icon.width > 0 ? 32px : 9px;
+
+    height: 32px;
+    min-width: 120px;
+    preferred-width: 260px;
+    opacity: enabled ? 1 : 0.5;
+
+    forward-focus: input;
+    accessible-role: text-input;
+    accessible-placeholder-text: placeholder;
+
+    Rectangle {
+        border-radius: Theme.radius-md;
+        background: Theme.carbon;
+        border-width: 1px;
+        border-color: input.has-focus ? Theme.periwinkle : Theme.ring;
+
+        Rectangle {
+            border-radius: Theme.radius-md;
+            background: @linear-gradient(180deg, #ffffff05 0%, #ffffff00 100%);
+        }
+    }
+
+    if root.icon.width > 0: Icon {
+        x: 10px;
+        source: root.icon;
+        tint: Theme.fog;
+    }
+
+    Rectangle {
+        x: root.text-left;
+        width: parent.width - root.text-left - 9px;
+        clip: true;
+
+        if root.text == "" && input.preedit-text == "": Text {
+            width: 100%;
+            height: 100%;
+            text: root.placeholder;
+            color: Theme.fog;
+            vertical-alignment: center;
+            overflow: elide;
+            font-size: Theme.text-body;
+            font-family: root.mono ? Theme.mono-family : Theme.font-family;
+        }
+
+        input := TextInput {
+            width: 100%;
+            height: 100%;
+            text <=> root.text;
+            enabled: root.enabled;
+            single-line: true;
+            vertical-alignment: center;
+            color: Theme.chalk;
+            font-size: Theme.text-body;
+            font-weight: Theme.weight-book;
+            font-family: root.mono ? Theme.mono-family : Theme.font-family;
+            input-type: root.password ? InputType.password : InputType.text;
+            selection-background-color: Theme.selection;
+            selection-foreground-color: Theme.chalk;
+            key-pressed(event) => {
+                let action = EditKeys.action(event.text, event.modifiers.control, event.modifiers.shift);
+                if (action == "paste") {
+                    self.paste();
+                } else if (action == "copy") {
+                    self.copy();
+                } else if (action == "cut") {
+                    self.cut();
+                } else if (action == "select-all") {
+                    self.select-all();
+                } else {
+                    return reject;
+                }
+                return accept;
+            }
+            edited => {
+                root.edited(self.text);
+            }
+            accepted => {
+                root.accepted(self.text);
+            }
+        }
+    }
+}
+
+// A dropdown in the neutral-button style; the list opens in a popup below it.
+export component Select {
+    in property <[string]> model;
+    in-out property <int> current-index;
+    in property <bool> enabled: true;
+    callback selected(int);
+
+    property <length> row-height: 28px;
+
+    height: 32px;
+    min-width: 160px;
+    preferred-width: 260px;
+    opacity: enabled ? 1 : 0.5;
+
+    accessible-role: combobox;
+    accessible-value: current-index >= 0 && current-index < model.length ? model[current-index] : "";
+
+    Rectangle {
+        border-radius: Theme.radius-md;
+        background: Theme.smoke-glass;
+        border-width: 1px;
+        border-color: popup.is-open ? Theme.periwinkle : Theme.ring;
+
+        Rectangle {
+            border-radius: Theme.radius-md;
+            background: ta.pressed ? Theme.pressed : ta.has-hover ? Theme.smoke-glass : transparent;
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 8px;
+        spacing: 6px;
+
+        Text {
+            horizontal-stretch: 1;
+            text: root.current-index >= 0 && root.current-index < root.model.length ? root.model[root.current-index] : "";
+            color: Theme.chalk;
+            vertical-alignment: center;
+            overflow: elide;
+            font-size: Theme.text-body;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            Icon {
+                source: @image-url("icons/chevron-down.svg");
+                tint: Theme.fog;
+            }
+        }
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            popup.show();
+        }
+    }
+
+    popup := PopupWindow {
+        x: 0;
+        y: root.height + 4px;
+        width: root.width;
+        height: min(root.model.length * root.row-height + 10px, 8 * root.row-height + 10px);
+        close-policy: PopupClosePolicy.close-on-click-outside;
+
+        Rectangle {
+            border-radius: Theme.radius-md;
+            background: Theme.iron;
+            border-width: 1px;
+            border-color: Theme.raised-rim;
+            drop-shadow-color: #00000066;
+            drop-shadow-offset-y: 8px;
+            drop-shadow-blur: 16px;
+            clip: true;
+
+            list := Flickable {
+                x: 5px;
+                y: 5px;
+                width: parent.width - 10px;
+                height: parent.height - 10px;
+                mouse-drag-pan-enabled: false;
+                content-height: root.model.length * root.row-height;
+                init => {
+                    // Scroll so that the current entry is visible when the list opens.
+                    self.content-y = -max(0px, min(root.current-index * root.row-height - 2 * root.row-height, self.content-height - self.height));
+                }
+
+                for label[i] in root.model: Rectangle {
+                    y: i * root.row-height;
+                    height: root.row-height;
+                    width: list.width;
+                    border-radius: Theme.radius-sm;
+                    background: item-ta.has-hover ? Theme.smoke-glass : transparent;
+
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 8px;
+
+                        Text {
+                            horizontal-stretch: 1;
+                            text: label;
+                            color: i == root.current-index ? Theme.chalk : Theme.silver;
+                            vertical-alignment: center;
+                            overflow: elide;
+                            font-size: Theme.text-body;
+                        }
+
+                        if i == root.current-index: VerticalLayout {
+                            alignment: center;
+                            Icon {
+                                source: @image-url("icons/check.svg");
+                                tint: Theme.pale-steel;
+                            }
+                        }
+                    }
+
+                    item-ta := TouchArea {
+                        clicked => {
+                            root.current-index = i;
+                            root.selected(i);
+                            popup.close();
+                        }
+                    }
+                }
+            }
+
+            // Thin scrollbar thumb, shown only when the list overflows.
+            if list.content-height > list.height: Rectangle {
+                x: parent.width - 6px;
+                width: 3px;
+                height: max(24px, list.height * list.height / list.content-height);
+                y: 5px + (-list.content-y) / (list.content-height - list.height) * (list.height - self.height);
+                border-radius: 2px;
+                background: Theme.ring;
+            }
+        }
+    }
+}
+
+// A vertical list that creates only the rows in view. The Slint compiler virtualizes a
+// `for` placed directly inside a component named ListView with these properties, so
+// this works without the std widgets. Rows need a fixed height and no `y`.
+export component ListView {
+    out property <length> visible-width <=> flickable.width;
+    out property <length> visible-height <=> flickable.height;
+    in-out property <length> content-width <=> flickable.content-width;
+    in-out property <length> content-height <=> flickable.content-height;
+    in-out property <length> content-y <=> flickable.content-y;
+
+    accessible-role: list;
+
+    flickable := Flickable {
+        width: parent.width;
+        height: parent.height;
+        mouse-drag-pan-enabled: false;
+        @children
+    }
+
+    // Thin scrollbar thumb, shown only when the list overflows.
+    if flickable.content-height > flickable.height: Rectangle {
+        x: parent.width - 4px;
+        width: 3px;
+        height: max(24px, flickable.height * flickable.height / flickable.content-height);
+        y: (-flickable.content-y) / (flickable.content-height - flickable.height) * (flickable.height - self.height);
+        border-radius: 2px;
+        background: Theme.ring;
+    }
+}
+
+export component Segmented {
+    in property <[string]> model;
+    in-out property <int> current-index;
+    in property <length> item-padding: 12px;
+    // Segments share the full width equally instead of hugging their labels.
+    in property <bool> stretch: false;
+    callback selected(int);
+
+    height: 28px;
+    accessible-role: tab-list;
+
+    Rectangle {
+        border-radius: Theme.radius-md;
+        background: Theme.iron;
+        border-width: 1px;
+        border-color: Theme.hairline;
+    }
+
+    HorizontalLayout {
+        padding: 2px;
+        spacing: 2px;
+
+        for label[i] in root.model: Rectangle {
+            horizontal-stretch: root.stretch ? 1 : 0;
+            preferred-width: root.stretch ? 1px : seg-layout.preferred-width;
+            border-radius: Theme.radius-sm;
+            background: i == root.current-index ? Theme.carbon : seg-ta.has-hover ? Theme.smoke-glass : transparent;
+            border-width: i == root.current-index ? 1px : 0px;
+            border-color: Theme.ring;
+            animate background { duration: 120ms; }
+            accessible-role: tab;
+            accessible-label: label;
+
+            seg-layout := HorizontalLayout {
+                padding-left: root.item-padding;
+                padding-right: root.item-padding;
+
+                Text {
+                    text: label;
+                    color: i == root.current-index ? Theme.chalk : Theme.silver;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                    font-size: Theme.text-body;
+                }
+            }
+
+            seg-ta := TouchArea {
+                clicked => {
+                    root.current-index = i;
+                    root.selected(i);
+                }
+            }
+        }
+    }
+}
+
+export component Tag inherits Rectangle {
+    in property <string> text;
+    in property <color> text-color: Theme.silver;
+
+    height: 16px;
+    border-radius: Theme.radius-xs;
+    background: Theme.pewter;
+    border-width: 1px;
+    border-color: Theme.veil;
+
+    HorizontalLayout {
+        padding-left: 4px;
+        padding-right: 4px;
+
+        Text {
+            text: root.text;
+            color: root.text-color;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-strong;
+            letter-spacing: 0.05px;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component Keycap inherits Rectangle {
+    in property <string> text;
+
+    height: 18px;
+    border-radius: Theme.radius-sm;
+    background: Theme.pewter;
+    border-width: 1px;
+    border-color: Theme.ring;
+
+    HorizontalLayout {
+        padding-left: 5px;
+        padding-right: 5px;
+
+        Text {
+            text: root.text;
+            color: Theme.chalk;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-strong;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// Settings card: Iron on the Carbon page, like the OpenCode console cards.
+export component Card inherits Rectangle {
+    background: Theme.iron;
+    border-radius: Theme.radius-md;
+    border-width: 1px;
+    border-color: Theme.hairline;
+
+    VerticalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 2px;
+        padding-bottom: 2px;
+        @children
+    }
+}
+
+export component Divider inherits Rectangle {
+    height: 1px;
+    background: Theme.veil;
+}
+
+export component SectionTitle inherits Text {
+    color: Theme.chalk;
+    font-size: Theme.text-body;
+    font-weight: Theme.weight-strong;
+    letter-spacing: -0.13px;
+}
+
+// Title and description on the left, the control on the right.
+export component SettingsRow {
+    in property <string> title;
+    in property <string> description;
+    in property <color> description-color: Theme.silver;
+
+    HorizontalLayout {
+        padding-top: 14px;
+        padding-bottom: 14px;
+        spacing: 24px;
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+
+            Text {
+                text: root.title;
+                color: Theme.chalk;
+                font-size: Theme.text-body;
+                font-weight: Theme.weight-strong;
+            }
+
+            if root.description != "": Text {
+                text: root.description;
+                color: root.description-color;
+                font-size: Theme.text-body;
+                wrap: word-wrap;
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 0;
+            alignment: center;
+            @children
+        }
+    }
+}
+
+export component NavItem {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> active;
+    callback clicked();
+
+    height: 28px;
+    accessible-role: tab;
+    accessible-label: text;
+
+    Rectangle {
+        border-radius: Theme.radius-md;
+        background: root.active ? Theme.pewter : ta.has-hover ? Theme.smoke-glass : transparent;
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 8px;
+
+        VerticalLayout {
+            alignment: center;
+            Icon {
+                source: root.icon;
+                tint: root.active ? Theme.chalk : Theme.silver;
+            }
+        }
+
+        Text {
+            text: root.text;
+            color: root.active ? Theme.chalk : Theme.silver;
+            vertical-alignment: center;
+            font-size: Theme.text-body;
+            font-weight: root.active ? Theme.weight-strong : Theme.weight-book;
+        }
+    }
+
+    ta := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}

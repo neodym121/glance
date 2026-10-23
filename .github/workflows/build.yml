@@ -1,0 +1,65 @@
+name: Build
+run-name: Glance ${{ github.ref_name }}
+
+# Runs on a tag like v0.0.1-beta or from the Actions tab. Produces one artifact whose root
+# holds only the .msi installer and the portable .exe.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Build release
+        run: cargo build --release --locked
+
+      # WiX v5: a .NET tool, so it does not depend on what the runner image ships.
+      - name: Install WiX
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          "$env:USERPROFILE\.dotnet\tools" >> $env:GITHUB_PATH
+
+      - name: Build installer and collect downloads
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
+          # MSI versions are numeric only: 0.0.1-beta installs as 0.0.1.
+          $msiVersion = $version -replace '-.*$', ''
+          "VERSION=$version" >> $env:GITHUB_ENV
+
+          # wix also writes a .wixpdb next to the .msi, so it builds outside out/.
+          New-Item -ItemType Directory -Force msi, out | Out-Null
+          wix build wix/glance.wxs -arch x64 -d "Version=$msiVersion" -d "ExePath=target/release/glance.exe" -o "msi/Glance_${version}_x64.msi"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          Copy-Item "msi/Glance_${version}_x64.msi" out/
+          # The release binary needs nothing next to it: on its own it is the portable version.
+          Copy-Item target/release/glance.exe "out/Glance_${version}_x64_portable.exe"
+          Get-ChildItem out | Format-Table Name, Length
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Glance_${{ env.VERSION }}_windows
+          path: out/*
+          if-no-files-found: error

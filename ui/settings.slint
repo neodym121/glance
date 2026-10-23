@@ -1,0 +1,1066 @@
+// Settings window. Created when opened and destroyed when closed; Rust fills the
+// properties from the config and reads them back as they change.
+
+import { Theme } from "theme.slint";
+import {
+    Button, ButtonKind, Card, Divider, Icon, ListView, NavItem, SectionTitle, Select, SettingsRow,
+    Switch, Tag, TextField
+} from "components.slint";
+
+export struct HotkeyCapture {
+    // "Ctrl+Alt+S", a partial "Ctrl+Alt+…" while only modifiers are held, or empty.
+    text: string,
+    complete: bool,
+    // The event was for a non-modifier key.
+    is-key: bool,
+}
+
+export struct ModelItem {
+    id: string,
+    name: string,
+    // The search text offered as a model ID that is not in the list.
+    custom: bool,
+}
+
+// The model list of the provider on screen (one picker is visible at a time).
+// Rust fetches, caches and filters it (src/models.rs, src/settings.rs).
+export global ModelList {
+    in property <[ModelItem]> items;
+    // Loading, an error or "no match"; shown in place of an empty list.
+    in property <string> status;
+    in property <bool> status-is-error;
+    in property <bool> loading;
+    // Name of the model in use, for the "Selected:" line.
+    in property <string> selected;
+    // Bumped by Rust to scroll the list: to `reveal-index`, or to the top when -1.
+    in property <int> reveal-request;
+    in property <int> reveal-index: -1;
+    in-out property <string> query;
+    callback refresh();
+    // The search text changed.
+    callback filter();
+    // A model was clicked (the picker already updated its model property).
+    callback picked();
+}
+
+component HotkeyField {
+    in-out property <string> value;
+    callback recording-changed(bool);
+    // Key event text, modifiers (ctrl, alt, shift, win) and "released" to the recorder state.
+    pure callback capture(string, bool, bool, bool, bool, bool) -> HotkeyCapture;
+
+    property <string> pending;
+    property <bool> recording: fs.has-focus;
+    // A key press reached the field since the last key release.
+    property <bool> key-down: false;
+    // The pending text is the "used by another app" notice; kept until the next press.
+    property <bool> warned: false;
+
+    width: 200px;
+    height: 32px;
+    accessible-role: button;
+    accessible-label: @tr("Capture shortcut");
+    accessible-value: value;
+
+    Rectangle {
+        border-radius: Theme.radius-md;
+        background: Theme.carbon;
+        border-width: 1px;
+        border-color: root.recording ? Theme.periwinkle : Theme.ring;
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+
+        VerticalLayout {
+            alignment: center;
+            Icon {
+                source: @image-url("icons/keyboard.svg");
+                tint: Theme.fog;
+            }
+        }
+
+        Text {
+            horizontal-stretch: 1;
+            text: !root.recording ? root.value : root.pending != "" ? root.pending : @tr("Press a shortcut…");
+            color: root.recording ? Theme.silver : Theme.chalk;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    fs := FocusScope {
+        focus-gained(reason) => {
+            root.pending = "";
+            root.key-down = false;
+            root.warned = false;
+            root.recording-changed(true);
+        }
+        focus-lost(reason) => {
+            root.pending = "";
+            root.recording-changed(false);
+        }
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                self.clear-focus();
+                return accept;
+            }
+            if (event.text == Key.Tab || event.text == Key.Backtab) {
+                return reject;
+            }
+            let m = event.modifiers;
+            let result = root.capture(event.text, m.control, m.alt, m.shift, m.meta, false);
+            if (result.complete) {
+                root.value = result.text;
+                self.clear-focus();
+                return accept;
+            }
+            if (result.is-key) {
+                root.key-down = true;
+            }
+            root.warned = false;
+            root.pending = result.text;
+            return accept;
+        }
+        key-released(event) => {
+            if (self.has-focus) {
+                let m = event.modifiers;
+                let result = root.capture(event.text, m.control, m.alt, m.shift, m.meta, true);
+                if (result.is-key) {
+                    // A key went up without its press reaching us: another app owns that shortcut.
+                    if (!root.key-down) {
+                        root.pending = result.text;
+                        root.warned = true;
+                    }
+                    root.key-down = false;
+                } else if (!root.warned) {
+                    root.pending = result.text;
+                }
+            }
+            return accept;
+        }
+    }
+}
+
+// One provider's API key: its name and whether a key is set on the left, the masked
+// field on the right. The stored key is loaded into the field while the window is open;
+// clearing the field removes the key.
+component KeyCard inherits Card {
+    in property <string> provider;
+    in-out property <string> value;
+
+    accessible-role: groupbox;
+    accessible-label: @tr("{} API key", root.provider);
+
+    SettingsRow {
+        title: root.provider;
+        description: root.value != "" ? @tr("All set!") : @tr("Not configured");
+        description-color: root.value != "" ? Theme.mint : Theme.coral;
+
+        TextField {
+            width: 240px;
+            password: true;
+            text <=> root.value;
+            placeholder: @tr("Paste your API key");
+        }
+    }
+}
+
+// Model of one AI provider: search, refresh and pick from the provider's list. OpenRouter
+// and Polza AI can also be pinned to one of the providers they route to.
+component ModelCard inherits Card {
+    in-out property <string> model;
+    in property <string> default-model;
+    in property <bool> has-route;
+    in-out property <string> route;
+
+    property <string> current: root.model != "" ? root.model : root.default-model;
+    property <length> row-height: 30px;
+    property <int> max-rows: 7;
+    property <int> reveal: ModelList.reveal-request;
+
+    changed reveal => {
+        root.scroll-to-reveal();
+    }
+
+    // Shows the requested row with two rows above it, or the top of the list. The
+    // list's own content height is only updated when it lays out, so it is computed.
+    function scroll-to-reveal() {
+        let target = ModelList.reveal-index < 0 ? 0px : ModelList.reveal-index * root.row-height - 2 * root.row-height;
+        let content = ModelList.items.length * root.row-height;
+        list.content-y = -max(0px, min(target, content - list.visible-height));
+    }
+
+    if root.has-route: SettingsRow {
+        title: @tr("Provider ID");
+        description: @tr("Send requests to this provider only, e.g. google-vertex. Leave empty to choose automatically.");
+
+        TextField {
+            width: 240px;
+            mono: true;
+            text <=> root.route;
+            placeholder: @tr("Automatic");
+        }
+    }
+
+    if root.has-route: Divider { }
+
+    VerticalLayout {
+        padding-top: 14px;
+        padding-bottom: 16px;
+        spacing: 10px;
+
+        HorizontalLayout {
+            spacing: 24px;
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: 2px;
+
+                Text {
+                    text: @tr("Model");
+                    color: Theme.chalk;
+                    font-weight: Theme.weight-strong;
+                }
+
+                Text {
+                    text: @tr("Selected: {}", ModelList.selected);
+                    color: Theme.silver;
+                    overflow: elide;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    text: ModelList.loading ? @tr("Loading…") : @tr("Refresh");
+                    icon: @image-url("icons/refresh-cw.svg");
+                    enabled: !ModelList.loading;
+                    clicked => {
+                        ModelList.refresh();
+                    }
+                }
+            }
+        }
+
+        TextField {
+            icon: @image-url("icons/search.svg");
+            placeholder: @tr("Search by name or ID…");
+            text <=> ModelList.query;
+            edited => {
+                ModelList.filter();
+            }
+        }
+
+        // A failed refresh keeps the previous list; say so above it.
+        if ModelList.items.length > 0 && ModelList.status-is-error: Text {
+            text: ModelList.status;
+            color: Theme.coral;
+            wrap: word-wrap;
+        }
+
+        Rectangle {
+            height: ModelList.items.length == 0 ? 64px : min(ModelList.items.length, root.max-rows) * root.row-height + 8px;
+            border-radius: Theme.radius-md;
+            background: Theme.carbon;
+            border-width: 1px;
+            border-color: Theme.hairline;
+            clip: true;
+
+            if ModelList.items.length == 0: HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                alignment: center;
+
+                Text {
+                    text: ModelList.status;
+                    color: ModelList.status-is-error ? Theme.coral : Theme.silver;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                    // Gentle pulse while the list loads.
+                    opacity: ModelList.loading ? 0.6 + 0.4 * sin(animation-tick() / 1ms * 0.3deg) : 1;
+                }
+            }
+
+            list := ListView {
+                x: 4px;
+                y: 4px;
+                width: parent.width - 8px;
+                height: parent.height - 8px;
+                // The card is created when its page or provider is shown, possibly
+                // after the list arrived.
+                init => {
+                    root.scroll-to-reveal();
+                }
+
+                for item in ModelList.items: row := Rectangle {
+                    property <bool> chosen: !item.custom && item.id == root.current;
+                    property <bool> show-id: item.custom || item.id != item.name;
+
+                    height: root.row-height;
+                    border-radius: Theme.radius-sm;
+                    background: self.chosen ? Theme.pewter : row-ta.has-hover ? Theme.smoke-glass : transparent;
+                    accessible-role: list-item;
+                    accessible-label: item.custom ? item.id : item.name;
+
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 10px;
+                        spacing: 10px;
+
+                        Text {
+                            horizontal-stretch: row.show-id ? 0 : 1;
+                            text: item.custom ? @tr("Use this model ID") : item.name;
+                            color: row.chosen ? Theme.chalk : item.custom ? Theme.silver : Theme.pale-steel;
+                            font-weight: row.chosen ? Theme.weight-strong : Theme.weight-book;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+
+                        if row.show-id: Text {
+                            horizontal-stretch: 1;
+                            text: item.id;
+                            color: Theme.fog;
+                            font-family: Theme.mono-family;
+                            font-size: Theme.text-caption;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+
+                        if row.chosen: VerticalLayout {
+                            alignment: center;
+                            Icon {
+                                source: @image-url("icons/check.svg");
+                                tint: Theme.pale-steel;
+                            }
+                        }
+                    }
+
+                    row-ta := TouchArea {
+                        clicked => {
+                            root.model = item.id;
+                            ModelList.picked();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Minimize and close in the custom title bar: small icon buttons, not system caption
+// buttons.
+component CaptionButton {
+    in property <image> icon;
+    in property <bool> danger;
+    in property <string> label;
+    callback clicked();
+
+    width: 28px;
+    height: 28px;
+    accessible-role: button;
+    accessible-label: label;
+
+    Rectangle {
+        border-radius: Theme.radius-md;
+        background: ta.pressed ? (root.danger ? #f1747140 : Theme.pressed)
+            : ta.has-hover ? (root.danger ? #f1747126 : Theme.smoke-glass)
+            : transparent;
+    }
+
+    Icon {
+        source: root.icon;
+        tint: ta.has-hover ? (root.danger ? Theme.coral : Theme.chalk) : Theme.silver;
+    }
+
+    ta := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+component Note inherits HorizontalLayout {
+    in property <string> text;
+
+    spacing: 8px;
+    padding-top: 2px;
+
+    VerticalLayout {
+        alignment: start;
+        padding-top: 2px;
+        Icon {
+            source: @image-url("icons/info.svg");
+            tint: Theme.fog;
+        }
+    }
+
+    Text {
+        horizontal-stretch: 1;
+        text: root.text;
+        color: Theme.silver;
+        wrap: word-wrap;
+    }
+}
+
+component PageHeader inherits VerticalLayout {
+    in property <string> title;
+    in property <string> description;
+
+    spacing: 4px;
+    padding-bottom: 4px;
+
+    Text {
+        text: root.title;
+        color: Theme.chalk;
+        font-size: Theme.text-heading;
+        font-weight: Theme.weight-strong;
+        letter-spacing: -0.13px;
+    }
+
+    Text {
+        text: root.description;
+        color: Theme.silver;
+        wrap: word-wrap;
+    }
+}
+
+export component SettingsWindow inherits Window {
+    // General
+    in-out property <string> hotkey;
+    in-out property <bool> auto-copy;
+    in-out property <bool> autostart;
+    callback hotkey-recording(bool);
+    pure callback capture-hotkey(string, bool, bool, bool, bool, bool) -> HotkeyCapture;
+
+    // Pickers list the AI providers first, in the same order in both:
+    // 0 OpenRouter, 1 Gemini, 2 Mistral, 3 Groq, 4 Polza AI (src/providers.rs).
+
+    // Recognition: 0-4 AI providers, 5 Windows OCR
+    in property <[string]> ocr-providers;
+    in-out property <int> ocr-provider;
+    in property <[string]> ocr-languages;
+    in-out property <int> ocr-language-index;
+    in property <bool> ocr-languages-missing;
+    // OCR component to suggest installing, e.g. "Language.OCR~~~en-US~0.0.1.0"; empty hides the hint.
+    in property <string> ocr-capability;
+    in-out property <string> ocr-model-openrouter;
+    in-out property <string> ocr-model-gemini;
+    in-out property <string> ocr-model-mistral;
+    in-out property <string> ocr-model-groq;
+    in-out property <string> ocr-model-polza;
+    in property <string> ocr-default-openrouter;
+    in property <string> ocr-default-gemini;
+    in property <string> ocr-default-mistral;
+    in property <string> ocr-default-groq;
+    in property <string> ocr-default-polza;
+    in-out property <string> ocr-route-openrouter;
+    in-out property <string> ocr-route-polza;
+
+    // Translation: 0-4 AI providers, 5 Google, 6 DeepL, 7 Microsoft
+    in property <[string]> translation-providers;
+    in-out property <int> translation-provider;
+    in property <[string]> target-languages;
+    in-out property <int> target-language-index;
+    in-out property <bool> auto-translate;
+    in-out property <string> tr-model-openrouter;
+    in-out property <string> tr-model-gemini;
+    in-out property <string> tr-model-mistral;
+    in-out property <string> tr-model-groq;
+    in-out property <string> tr-model-polza;
+    in property <string> tr-default-openrouter;
+    in property <string> tr-default-gemini;
+    in property <string> tr-default-mistral;
+    in property <string> tr-default-groq;
+    in property <string> tr-default-polza;
+    in-out property <string> tr-route-openrouter;
+    in-out property <string> tr-route-polza;
+    in-out property <string> microsoft-region;
+
+    // API keys: 0-4 AI providers, 5 Google, 6 DeepL, 7 Microsoft (same order as on the page)
+    in-out property <string> key-openrouter;
+    in-out property <string> key-gemini;
+    in-out property <string> key-mistral;
+    in-out property <string> key-groq;
+    in-out property <string> key-polza;
+    in-out property <string> key-google;
+    in-out property <string> key-deepl;
+    in-out property <string> key-microsoft;
+
+    in property <string> version;
+    in property <string> error-text;
+    // The close button in the custom title bar.
+    callback close-clicked();
+    // The page or a provider changed, so another model list (or none) is on screen.
+    callback models-context();
+
+    in-out property <int> page: 0;
+
+    changed page => {
+        root.models-context();
+    }
+    changed ocr-provider => {
+        root.models-context();
+    }
+    changed translation-provider => {
+        root.models-context();
+    }
+
+    title: @tr("Glance Settings");
+    no-frame: true;
+    resize-border-width: 6px;
+    preferred-width: 920px;
+    preferred-height: 660px;
+    min-width: 840px;
+    min-height: 560px;
+    max-width: 1200px;
+    max-height: 900px;
+    background: Theme.carbon;
+    default-font-family: Theme.font-family;
+    default-font-size: Theme.text-body;
+    default-font-weight: Theme.weight-book;
+
+    VerticalLayout {
+        // Title bar drawn by the app (the window has no system frame).
+        Rectangle {
+            height: 40px;
+
+            WindowMoveArea {
+                x: 0;
+                y: 0;
+                width: parent.width - 72px;
+                height: parent.height;
+            }
+
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 8px;
+                spacing: 8px;
+
+                VerticalLayout {
+                    alignment: center;
+                    Icon {
+                        source: @image-url("icons/scan-text.svg");
+                        tint: Theme.pale-steel;
+                    }
+                }
+
+                Text {
+                    horizontal-stretch: 1;
+                    text: @tr("Glance Settings");
+                    color: Theme.silver;
+                    font-size: Theme.text-caption;
+                    vertical-alignment: center;
+                }
+
+                VerticalLayout {
+                    alignment: center;
+                    HorizontalLayout {
+                        spacing: 4px;
+
+                        CaptionButton {
+                            icon: @image-url("icons/minus.svg");
+                            label: @tr("Minimize");
+                            clicked => {
+                                root.minimized = true;
+                            }
+                        }
+
+                        CaptionButton {
+                            icon: @image-url("icons/x.svg");
+                            label: @tr("Close");
+                            danger: true;
+                            clicked => {
+                                root.close-clicked();
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.hairline;
+            }
+        }
+
+        HorizontalLayout {
+            vertical-stretch: 1;
+
+            // Sidebar. Its empty space moves the window, like the title bar.
+            Rectangle {
+                width: 216px;
+
+                WindowMoveArea {
+                    width: parent.width;
+                    height: parent.height;
+                }
+
+                VerticalLayout {
+                    padding: 16px;
+                    padding-top: 20px;
+                    spacing: 4px;
+
+                    NavItem {
+                        text: @tr("General");
+                        icon: @image-url("icons/settings-2.svg");
+                        active: root.page == 0;
+                        clicked => {
+                            root.page = 0;
+                        }
+                    }
+
+                    NavItem {
+                        text: @tr("Recognition");
+                        icon: @image-url("icons/scan-text.svg");
+                        active: root.page == 1;
+                        clicked => {
+                            root.page = 1;
+                        }
+                    }
+
+                    NavItem {
+                        text: @tr("Translation");
+                        icon: @image-url("icons/languages.svg");
+                        active: root.page == 2;
+                        clicked => {
+                            root.page = 2;
+                        }
+                    }
+
+                    NavItem {
+                        text: @tr("API Keys");
+                        icon: @image-url("icons/key.svg");
+                        active: root.page == 3;
+                        clicked => {
+                            root.page = 3;
+                        }
+                    }
+
+                    NavItem {
+                        text: @tr("About");
+                        icon: @image-url("icons/info.svg");
+                        active: root.page == 4;
+                        clicked => {
+                            root.page = 4;
+                        }
+                    }
+
+                    Rectangle { }
+                }
+            }
+
+            Rectangle {
+                width: 1px;
+                background: Theme.hairline;
+            }
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+
+                page-scroll := Flickable {
+                    vertical-stretch: 1;
+                    mouse-drag-pan-enabled: false;
+                    content-height: page-content.preferred-height;
+
+                    page-content := VerticalLayout {
+                        width: page-scroll.width;
+                        padding-left: 28px;
+                        padding-right: 28px;
+                        padding-top: 24px;
+                        padding-bottom: 32px;
+                        spacing: 24px;
+                        alignment: start;
+
+                        if root.page == 0: VerticalLayout {
+                            spacing: 24px;
+
+                            PageHeader {
+                                title: @tr("General");
+                                description: @tr("Shortcut and everyday behavior.");
+                            }
+
+                            VerticalLayout {
+                                spacing: 12px;
+                                SectionTitle {
+                                    text: @tr("Shortcut");
+                                }
+
+                                Card {
+                                    SettingsRow {
+                                        title: @tr("Capture shortcut");
+                                        description: @tr("Press it anywhere to select an area of the screen. Click the field and press a new combination to change it.");
+
+                                        HotkeyField {
+                                            value <=> root.hotkey;
+                                            recording-changed(on) => {
+                                                root.hotkey-recording(on);
+                                            }
+                                            capture(text, ctrl, alt, shift, win, released) => {
+                                                return root.capture-hotkey(text, ctrl, alt, shift, win, released);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            VerticalLayout {
+                                spacing: 12px;
+                                SectionTitle {
+                                    text: @tr("Behavior");
+                                }
+
+                                Card {
+                                    SettingsRow {
+                                        title: @tr("Copy text automatically");
+                                        description: @tr("Put the recognized text on the clipboard as soon as it is ready.");
+                                        Switch {
+                                            label: @tr("Copy text automatically");
+                                            checked <=> root.auto-copy;
+                                        }
+                                    }
+
+                                    Divider { }
+
+                                    SettingsRow {
+                                        title: @tr("Start with Windows");
+                                        description: @tr("Launch Glance in the system tray when you sign in.");
+                                        Switch {
+                                            label: @tr("Start with Windows");
+                                            checked <=> root.autostart;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Recognition
+                        if root.page == 1: VerticalLayout {
+                            spacing: 24px;
+
+                            PageHeader {
+                                title: @tr("Recognition");
+                                description: @tr("How text is read from the selected area.");
+                            }
+
+                            Card {
+                                SettingsRow {
+                                    title: @tr("Engine");
+                                    description: root.ocr-provider == 5
+                                        ? @tr("Windows OCR runs on this PC. Nothing leaves your computer.")
+                                        : @tr("A vision model reads the image. The selected area is sent to the provider.");
+
+                                    Select {
+                                        width: 240px;
+                                        model: root.ocr-providers;
+                                        current-index <=> root.ocr-provider;
+                                    }
+                                }
+                            }
+
+                            if root.ocr-provider == 5: VerticalLayout {
+                                spacing: 12px;
+
+                                Card {
+                                    SettingsRow {
+                                        title: @tr("Language");
+                                        description: @tr("Windows OCR reads one language at a time. Automatic picks one of your Windows languages; a Cyrillic or Asian one also reads Latin text.");
+
+                                        Select {
+                                            width: 240px;
+                                            model: root.ocr-languages;
+                                            current-index <=> root.ocr-language-index;
+                                        }
+                                    }
+                                }
+
+                                if root.ocr-capability != "": Note {
+                                    text: root.ocr-languages-missing
+                                        ? @tr("No OCR languages are installed on this PC. Install one from an administrator PowerShell:")
+                                        : @tr("To add another language, install its OCR component from an administrator PowerShell:");
+                                }
+
+                                if root.ocr-capability != "": Rectangle {
+                                    height: 36px;
+                                    border-radius: Theme.radius-sm;
+                                    background: Theme.iron;
+                                    border-width: 1px;
+                                    border-color: Theme.ring;
+
+                                    TextInput {
+                                        x: 12px;
+                                        width: parent.width - 24px;
+                                        vertical-alignment: center;
+                                        read-only: true;
+                                        text: "Add-WindowsCapability -Online -Name " + root.ocr-capability;
+                                        color: Theme.chalk;
+                                        font-family: Theme.mono-family;
+                                        selection-background-color: Theme.selection;
+                                    }
+                                }
+                            }
+
+                            if root.ocr-provider == 0: ModelCard {
+                                model <=> root.ocr-model-openrouter;
+                                default-model: root.ocr-default-openrouter;
+                                has-route: true;
+                                route <=> root.ocr-route-openrouter;
+                            }
+
+                            if root.ocr-provider == 1: ModelCard {
+                                model <=> root.ocr-model-gemini;
+                                default-model: root.ocr-default-gemini;
+                            }
+
+                            if root.ocr-provider == 2: ModelCard {
+                                model <=> root.ocr-model-mistral;
+                                default-model: root.ocr-default-mistral;
+                            }
+
+                            if root.ocr-provider == 3: ModelCard {
+                                model <=> root.ocr-model-groq;
+                                default-model: root.ocr-default-groq;
+                            }
+
+                            if root.ocr-provider == 4: ModelCard {
+                                model <=> root.ocr-model-polza;
+                                default-model: root.ocr-default-polza;
+                                has-route: true;
+                                route <=> root.ocr-route-polza;
+                            }
+
+                            if root.ocr-provider < 5: Note {
+                                text: @tr("Only models that accept images are listed when the provider says which ones do.");
+                            }
+                        }
+
+                        if root.page == 2: VerticalLayout {
+                            spacing: 24px;
+
+                            PageHeader {
+                                title: @tr("Translation");
+                                description: @tr("Only the recognized text is sent for translation, never the image.");
+                            }
+
+                            Card {
+                                SettingsRow {
+                                    title: @tr("Provider");
+                                    description: @tr("The source language is detected automatically.");
+                                    Select {
+                                        width: 240px;
+                                        model: root.translation-providers;
+                                        current-index <=> root.translation-provider;
+                                    }
+                                }
+
+                                Divider { }
+
+                                SettingsRow {
+                                    title: @tr("Translate into");
+                                    Select {
+                                        width: 240px;
+                                        model: root.target-languages;
+                                        current-index <=> root.target-language-index;
+                                    }
+                                }
+
+                                Divider { }
+
+                                SettingsRow {
+                                    title: @tr("Translate automatically");
+                                    description: @tr("Start translating as soon as text is recognized instead of waiting for the Translate button.");
+                                    Switch {
+                                        label: @tr("Translate automatically");
+                                        checked <=> root.auto-translate;
+                                    }
+                                }
+                            }
+
+                            if root.translation-provider == 0: ModelCard {
+                                model <=> root.tr-model-openrouter;
+                                default-model: root.tr-default-openrouter;
+                                has-route: true;
+                                route <=> root.tr-route-openrouter;
+                            }
+
+                            if root.translation-provider == 1: ModelCard {
+                                model <=> root.tr-model-gemini;
+                                default-model: root.tr-default-gemini;
+                            }
+
+                            if root.translation-provider == 2: ModelCard {
+                                model <=> root.tr-model-mistral;
+                                default-model: root.tr-default-mistral;
+                            }
+
+                            if root.translation-provider == 3: ModelCard {
+                                model <=> root.tr-model-groq;
+                                default-model: root.tr-default-groq;
+                            }
+
+                            if root.translation-provider == 4: ModelCard {
+                                model <=> root.tr-model-polza;
+                                default-model: root.tr-default-polza;
+                                has-route: true;
+                                route <=> root.tr-route-polza;
+                            }
+
+                            if root.translation-provider == 5: Note {
+                                text: root.key-google == ""
+                                    ? @tr("Works without a key through Google's free web endpoint (unofficial, may be rate-limited). With a Cloud Translation key on the API Keys page, the official API is used.")
+                                    : @tr("Uses the official Cloud Translation API with your key.");
+                            }
+
+                            if root.translation-provider == 7 && root.key-microsoft == "": Note {
+                                text: @tr("Microsoft Translator needs a key. The free tier (F0) of an Azure Translator resource covers 2 million characters a month.");
+                            }
+
+                            if root.translation-provider == 7: Card {
+                                SettingsRow {
+                                    title: @tr("Region");
+                                    description: @tr("The Azure region of your Translator resource, such as westeurope. Leave empty for a global resource.");
+                                    TextField {
+                                        width: 240px;
+                                        mono: true;
+                                        text <=> root.microsoft-region;
+                                        placeholder: "global";
+                                    }
+                                }
+                            }
+                        }
+
+                        if root.page == 3: VerticalLayout {
+                            spacing: 24px;
+
+                            PageHeader {
+                                title: @tr("API Keys");
+                                description: @tr("Keys for every service Glance can use. One key serves both recognition and translation.");
+                            }
+
+                            VerticalLayout {
+                                spacing: 8px;
+
+                                KeyCard {
+                                    provider: "OpenRouter";
+                                    value <=> root.key-openrouter;
+                                }
+
+                                KeyCard {
+                                    provider: "Google Gemini";
+                                    value <=> root.key-gemini;
+                                }
+
+                                KeyCard {
+                                    provider: "Mistral AI";
+                                    value <=> root.key-mistral;
+                                }
+
+                                KeyCard {
+                                    provider: "Groq";
+                                    value <=> root.key-groq;
+                                }
+
+                                KeyCard {
+                                    provider: "Polza AI";
+                                    value <=> root.key-polza;
+                                }
+
+                                KeyCard {
+                                    provider: "Google Translate";
+                                    value <=> root.key-google;
+                                }
+
+                                KeyCard {
+                                    provider: "DeepL";
+                                    value <=> root.key-deepl;
+                                }
+
+                                KeyCard {
+                                    provider: "Microsoft Translator";
+                                    value <=> root.key-microsoft;
+                                }
+                            }
+
+                            Note {
+                                text: @tr("Keys are kept in Windows Credential Manager, never in the settings file. Clearing a field removes its key.");
+                            }
+                        }
+
+                        if root.page == 4: VerticalLayout {
+                            spacing: 24px;
+
+                            PageHeader {
+                                title: "Glance";
+                                description: @tr("Screen text recognition and translation from the system tray.");
+                            }
+
+                            Card {
+                                SettingsRow {
+                                    title: @tr("Version");
+                                    Tag {
+                                        text: root.version;
+                                    }
+                                }
+
+                                Divider { }
+
+                                // "Slint works on your machine": the logo stands in for the word.
+                                HorizontalLayout {
+                                    padding-top: 14px;
+                                    padding-bottom: 14px;
+                                    spacing: 6px;
+                                    alignment: start;
+                                    accessible-role: text;
+                                    accessible-label: @tr("Slint works on your machine");
+
+                                    VerticalLayout {
+                                        alignment: center;
+                                        padding-bottom: 1px;
+                                        Image {
+                                            source: @image-url("images/slint-logo-gray.png");
+                                            height: 15px;
+                                            width: self.height * 512 / 153;
+                                            colorize: Theme.silver;
+                                        }
+                                    }
+
+                                    Text {
+                                        text: @tr("works on your machine");
+                                        color: Theme.silver;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Changes are saved as they are made; problems show here.
+                if root.error-text != "": Rectangle {
+                    height: 40px;
+                    background: Theme.iron;
+
+                    Rectangle {
+                        y: 0;
+                        height: 1px;
+                        background: Theme.hairline;
+                    }
+
+                    Text {
+                        x: 16px;
+                        width: parent.width - 32px;
+                        text: root.error-text;
+                        color: Theme.coral;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+            }
+        }
+    }
+}

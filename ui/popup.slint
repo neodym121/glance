@@ -1,0 +1,234 @@
+// Compact result card shown under the selection. Rust positions the window; the
+// height follows the content through `desired-height`.
+
+import { Theme } from "theme.slint";
+import { Button, ButtonKind, EditKeys, Icon } from "components.slint";
+
+export enum PopupState { recognizing, text, empty, error }
+
+export component ResultPopup inherits Window {
+    in property <length> popup-width: 420px;
+    in property <PopupState> state: PopupState.recognizing;
+    // The text on display: the original or, after "Translate", the translation.
+    in property <string> text;
+    in property <string> error;
+    in property <bool> showing-translation;
+    in property <bool> translating;
+    in property <bool> has-link;
+    // Translate/Original toggle; Rust enables it once there is text to translate.
+    in property <bool> actions-enabled;
+    // Footer caption, e.g. the engine name or "Copied to clipboard".
+    in property <string> status;
+    in property <bool> status-ok;
+
+    callback dismiss();
+    callback copy();
+    callback translate();
+    callback open-link();
+
+    property <length> pad: 14px;
+    property <length> max-body: 320px;
+    property <length> body-height: root.state == PopupState.text ? min(body.preferred-height, root.max-body)
+        : root.state == PopupState.error ? error-text.preferred-height
+        : 20px;
+    out property <length> desired-height: 12px + root.body-height + 12px + 1px + 40px;
+
+    title: "Glance";
+    no-frame: true;
+    always-on-top: true;
+    background: Theme.iron;
+    width: root.popup-width;
+    height: root.desired-height;
+    default-font-family: Theme.font-family;
+    default-font-size: Theme.text-body;
+    forward-focus: keys;
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.dismiss();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    // A faint rim keeps the edge visible on dark backgrounds (DWM adds the shadow).
+    Rectangle {
+        border-width: 1px;
+        border-color: Theme.raised-rim;
+        border-radius: Theme.radius-sm; // matches the Windows 11 small corner rounding
+    }
+
+    if root.state == PopupState.recognizing: Text {
+        x: root.pad;
+        y: 12px;
+        height: 20px;
+        text: @tr("Recognizing text…");
+        color: Theme.silver;
+        vertical-alignment: center;
+        // Gentle pulse while waiting; the element only exists in this state.
+        opacity: 0.6 + 0.4 * sin(animation-tick() / 1ms * 0.3deg);
+    }
+
+    if root.state == PopupState.empty: Text {
+        x: root.pad;
+        y: 12px;
+        height: 20px;
+        text: @tr("No text found in the selected area.");
+        color: Theme.fog;
+        vertical-alignment: center;
+    }
+
+    error-row := HorizontalLayout {
+        x: root.pad;
+        y: 12px;
+        width: root.width - 2 * root.pad;
+        height: root.body-height;
+        spacing: 8px;
+        visible: root.state == PopupState.error;
+
+        VerticalLayout {
+            alignment: start;
+            padding-top: 2px;
+            Icon {
+                source: @image-url("icons/circle-alert.svg");
+                tint: Theme.coral;
+            }
+        }
+
+        // Selectable, so a suggested command can be copied.
+        error-text := TextInput {
+            horizontal-stretch: 1;
+            text: root.error;
+            read-only: true;
+            single-line: false;
+            wrap: word-wrap;
+            color: Theme.coral;
+            selection-background-color: Theme.selection;
+            selection-foreground-color: Theme.chalk;
+        }
+    }
+
+    scroller := Flickable {
+        x: root.pad;
+        y: 12px;
+        width: root.width - 2 * root.pad;
+        height: root.body-height;
+        visible: root.state == PopupState.text;
+        mouse-drag-pan-enabled: false;
+        content-width: self.width;
+        content-height: body.preferred-height;
+
+        body := TextInput {
+            width: scroller.width;
+            height: max(self.preferred-height, scroller.height);
+            text: root.text;
+            read-only: true;
+            single-line: false;
+            wrap: word-wrap;
+            color: Theme.chalk;
+            font-size: Theme.text-body;
+            font-weight: Theme.weight-book;
+            selection-background-color: Theme.selection;
+            selection-foreground-color: Theme.chalk;
+            key-pressed(event) => {
+                let action = EditKeys.action(event.text, event.modifiers.control, event.modifiers.shift);
+                if (action == "copy") {
+                    self.copy();
+                } else if (action == "select-all") {
+                    self.select-all();
+                } else {
+                    return reject;
+                }
+                return accept;
+            }
+        }
+    }
+
+    if scroller.visible && scroller.content-height > scroller.height: Rectangle {
+        x: root.width - 6px;
+        width: 3px;
+        height: max(24px, scroller.height * scroller.height / scroller.content-height);
+        y: 12px + (-scroller.content-y) / (scroller.content-height - scroller.height) * (scroller.height - self.height);
+        border-radius: 2px;
+        background: Theme.ring;
+    }
+
+    // Footer
+    Rectangle {
+        y: root.height - 41px;
+        height: 1px;
+        background: Theme.hairline;
+    }
+
+    HorizontalLayout {
+        y: root.height - 40px;
+        height: 40px;
+        padding-left: root.pad;
+        padding-right: 8px;
+        spacing: 4px;
+
+        HorizontalLayout {
+            horizontal-stretch: 1;
+            spacing: 6px;
+
+            if root.status-ok: VerticalLayout {
+                alignment: center;
+                Icon {
+                    source: @image-url("icons/check.svg");
+                    tint: Theme.mint;
+                }
+            }
+
+            Text {
+                horizontal-stretch: 1;
+                text: root.status;
+                color: root.status-ok ? Theme.mint : Theme.fog;
+                font-size: Theme.text-caption;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+
+        if root.has-link: VerticalLayout {
+            alignment: center;
+            Button {
+                small: true;
+                kind: ButtonKind.ghost-muted;
+                icon: @image-url("icons/external-link.svg");
+                text: @tr("Open");
+                clicked => {
+                    root.open-link();
+                }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            Button {
+                small: true;
+                kind: ButtonKind.ghost-muted;
+                icon: @image-url("icons/copy.svg");
+                text: @tr("Copy");
+                enabled: root.state == PopupState.text;
+                clicked => {
+                    root.copy();
+                }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            Button {
+                small: true;
+                icon: @image-url("icons/languages.svg");
+                text: root.translating ? @tr("Translating…") : root.showing-translation ? @tr("Original") : @tr("Translate");
+                enabled: root.actions-enabled && !root.translating;
+                clicked => {
+                    root.translate();
+                }
+            }
+        }
+    }
+}

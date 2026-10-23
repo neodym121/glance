@@ -1,0 +1,53 @@
+// Design tokens from media/DESIGN.md (graphite console).
+// Half-pixel rims from the CSS source are drawn as 1px lines at about half the alpha.
+
+export global Theme {
+    // Surfaces
+    out property <color> carbon: #161616;
+    out property <color> iron: #242424;
+    out property <color> pewter: #2e2e2e;
+    out property <color> lead: #5c5c5c;
+
+    // Text and icons
+    out property <color> chalk: #fafafa;
+    out property <color> pale-steel: #dbdbdb;
+    out property <color> silver: #aeaeae;
+    out property <color> fog: #808080;
+    out property <color> flash-white: #ffffff;
+
+    // Translucent white overlays and lines
+    out property <color> smoke-glass: #ffffff0f; // 6%: control fill, hover overlay
+    out property <color> pressed: #ffffff1a;     // 10%: pressed overlay
+    out property <color> hairline: #ffffff14;    // 8%: dividers, card borders
+    out property <color> veil: #ffffff1a;        // 10%: tags, small plates
+    out property <color> ring: #ffffff24;        // button and input ring (0.5px at 20%)
+    out property <color> raised-rim: #ffffff1c;  // card and popup rim (0.5px at 16%)
+
+    // Functional colors
+    out property <color> cobalt: #3b5cf6;      // switch on
+    out property <color> periwinkle: #7698fd;  // focus
+    out property <color> mint: #6bd586;        // success text and dots
+    out property <color> coral: #f17471;       // danger text
+    out property <color> selection: #7698fd59; // text selection
+
+    // Capture overlay (the frame is dimmed to half brightness in capture.rs)
+    out property <color> crosshair: #b4c8dacc;   // thin light grey-blue guide lines
+    out property <color> selection-edge: #c7d7e6; // selection frame
+
+    // Type: Segoe UI Variable is the system-ui substitute for Inter on Windows 11
+    // (Segoe UI on Windows 10). 440/530 weights map to the variable axis when present.
+    out property <string> font-family: "Segoe UI Variable Text";
+    out property <string> mono-family: "Consolas";
+    out property <length> text-label: 11px;
+    out property <length> text-caption: 12px;
+    out property <length> text-body: 13px;
+    out property <length> text-heading: 15px;
+    out property <int> weight-book: 440;
+    out property <int> weight-medium: 500;
+    out property <int> weight-strong: 530;
+
+    // Radii
+    out property <length> radius-xs: 2px;
+    out property <length> radius-sm: 4px;
+    out property <length> radius-md: 6px;
+}

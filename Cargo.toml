@@ -1,0 +1,74 @@
+[package]
+name = "glance"
+version = "0.0.1-beta"
+edition = "2024"
+description = "Screen OCR and translation from the Windows system tray"
+license = "MIT"
+repository = "https://github.com/neodym121/glance"
+publish = false
+build = "build.rs"
+
+[dependencies]
+# Software renderer only: no OpenGL/D3D context or GPU driver is loaded into the process.
+# `unstable-winit-030` gives access to the winit window (taskbar flags, focus events);
+# it is tied to this Slint minor version, so upgrade Slint deliberately.
+slint = { version = "~1.18.1", default-features = false, features = [
+    "std",
+    "compat-1-2",
+    "backend-winit",
+    "renderer-software",
+    "unstable-winit-030",
+] }
+tray-icon = { version = "0.26.1", default-features = false }
+global-hotkey = "0.9.0"
+# SChannel TLS with the Windows certificate store; honours the system proxy.
+ureq = { version = "3.5.0", default-features = false, features = [
+    "native-tls-no-default",
+    "json",
+    "win-system-proxy",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+png = "0.18.1"
+
+[dependencies.windows]
+version = "0.62.2"
+features = [
+    # WinRT: Windows.Media.Ocr and the types it needs
+    "Foundation",
+    "Foundation_Collections",
+    "Globalization",
+    "Graphics_Imaging",
+    "Media_Ocr",
+    "Security_Cryptography",
+    "Storage_Streams",
+    "System_UserProfile",
+    # Win32
+    "Win32_Foundation",
+    "Win32_Globalization",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_Security_Credentials",
+    "Win32_System_Com",
+    "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_System_Registry",
+    "Win32_System_Threading",
+    "Win32_System_WinRT",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+]
+
+[build-dependencies]
+slint-build = "~1.18.1"
+embed-resource = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

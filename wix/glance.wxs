@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Glance installer (WiX v5), built by .github/workflows/build.yml from the repository root:
+
+      wix build wix/glance.wxs -arch x64 -d Version=0.0.1 -d ExePath=target/release/glance.exe -o Glance.msi
+
+  Version is the numeric part of the Cargo version: MSI versions have no pre-release tag.
+  Per machine: glance.exe in Program Files\Glance and a Start menu shortcut.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="Glance"
+      Manufacturer="neodym121"
+      Version="$(var.Version)"
+      UpgradeCode="229E7A9B-8234-47A3-BBB3-25E3BC952FFC"
+      Scope="perMachine">
+
+    <!-- A beta and its release share x.y.z, so the same version replaces the installed one too. -->
+    <MajorUpgrade
+        AllowSameVersionUpgrades="yes"
+        DowngradeErrorMessage="A newer version of Glance is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="GlanceIcon" SourceFile="assets\glance.ico" />
+    <Property Id="ARPPRODUCTICON" Value="GlanceIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/neodym121/glance" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Glance">
+        <Component Id="GlanceExe">
+          <File Id="GlanceExe" Source="$(var.ExePath)" Name="glance.exe" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut">
+        <Shortcut
+            Id="StartMenuShortcut"
+            Name="Glance"
+            Description="Screen OCR and translation"
+            Target="[#GlanceExe]"
+            WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue
+            Root="HKCU"
+            Key="Software\Glance"
+            Name="StartMenuShortcut"
+            Type="integer"
+            Value="1"
+            KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Glance">
+      <ComponentRef Id="GlanceExe" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+  </Package>
+</Wix>
