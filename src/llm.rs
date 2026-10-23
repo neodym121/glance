@@ -1,4 +1,4 @@
-//! OpenAI-compatible chat completions (OpenRouter, Gemini, Mistral, Groq, Polza AI).
+//! OpenAI-compatible chat completions (Gemini, Mistral, Groq, Polza AI).
 
 use serde_json::{Value, json};
 
@@ -6,15 +6,11 @@ use crate::error::{Error, Result};
 use crate::http;
 use crate::providers::AiProvider;
 
-/// `route` names the upstream providers OpenRouter or Polza AI may use for the model
-/// (`Routes` in the config); empty lets the service choose. Other providers ignore it.
+/// `route` names the upstream providers Polza AI may use for the model (`Routes` in
+/// the config); empty lets the service choose. Other providers ignore it.
 pub fn chat(provider: AiProvider, model: &str, route: &str, key: &str, messages: Value) -> Result<String> {
     let auth = format!("Bearer {key}");
-    let mut headers = vec![("Authorization", auth.as_str())];
-    if provider == AiProvider::OpenRouter {
-        // Optional attribution headers recommended by OpenRouter.
-        headers.push(("X-Title", "Glance"));
-    }
+    let headers = vec![("Authorization", auth.as_str())];
     let mut body = json!({
         "model": model,
         "messages": messages,
@@ -23,7 +19,6 @@ pub fn chat(provider: AiProvider, model: &str, route: &str, key: &str, messages:
     });
     let only = route_list(route);
     if provider.routes() && !only.is_empty() {
-        // Both services take an allow-list of upstream providers in `provider.only`.
         body["provider"] = json!({ "only": only });
     }
     let response = http::post_json(

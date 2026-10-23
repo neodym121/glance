@@ -168,8 +168,8 @@ component KeyCard inherits Card {
     }
 }
 
-// Model of one AI provider: search, refresh and pick from the provider's list. OpenRouter
-// and Polza AI can also be pinned to one of the providers they route to.
+// Model of one AI provider: search, refresh and pick from the provider's list. Polza
+// AI can also be pinned to one of the providers it routes to.
 component ModelCard inherits Card {
     in-out property <string> model;
     in property <string> default-model;
@@ -438,51 +438,49 @@ export component SettingsWindow inherits Window {
     pure callback capture-hotkey(string, bool, bool, bool, bool, bool) -> HotkeyCapture;
 
     // Pickers list the AI providers first, in the same order in both:
-    // 0 OpenRouter, 1 Gemini, 2 Mistral, 3 Groq, 4 Polza AI (src/providers.rs).
+    // 0 Gemini, 1 Mistral, 2 Groq, 3 Polza AI (src/providers.rs).
 
-    // Recognition: 0-4 AI providers, 5 Windows OCR
+    // Recognition: 0-3 AI providers, 4 Paddle OCR
     in property <[string]> ocr-providers;
     in-out property <int> ocr-provider;
-    in property <[string]> ocr-languages;
-    in-out property <int> ocr-language-index;
-    in property <bool> ocr-languages-missing;
-    // OCR component to suggest installing, e.g. "Language.OCR~~~en-US~0.0.1.0"; empty hides the hint.
-    in property <string> ocr-capability;
-    in-out property <string> ocr-model-openrouter;
+    // Paddle OCR: the script picker and the state of its model files.
+    in property <[string]> paddle-languages;
+    in-out property <int> paddle-language-index;
+    in property <bool> paddle-ready;
+    in property <bool> paddle-downloading;
+    in property <float> paddle-progress;
+    in property <string> paddle-error;
+    // Bytes a download would still move, formatted in Rust; "0.0 MB" when ready.
+    in property <string> paddle-size;
+    callback download-paddle();
     in-out property <string> ocr-model-gemini;
     in-out property <string> ocr-model-mistral;
     in-out property <string> ocr-model-groq;
     in-out property <string> ocr-model-polza;
-    in property <string> ocr-default-openrouter;
     in property <string> ocr-default-gemini;
     in property <string> ocr-default-mistral;
     in property <string> ocr-default-groq;
     in property <string> ocr-default-polza;
-    in-out property <string> ocr-route-openrouter;
     in-out property <string> ocr-route-polza;
 
-    // Translation: 0-4 AI providers, 5 Google, 6 DeepL, 7 Microsoft
+    // Translation: 0-3 AI providers, 4 Google, 5 DeepL, 6 Microsoft
     in property <[string]> translation-providers;
     in-out property <int> translation-provider;
     in property <[string]> target-languages;
     in-out property <int> target-language-index;
     in-out property <bool> auto-translate;
-    in-out property <string> tr-model-openrouter;
     in-out property <string> tr-model-gemini;
     in-out property <string> tr-model-mistral;
     in-out property <string> tr-model-groq;
     in-out property <string> tr-model-polza;
-    in property <string> tr-default-openrouter;
     in property <string> tr-default-gemini;
     in property <string> tr-default-mistral;
     in property <string> tr-default-groq;
     in property <string> tr-default-polza;
-    in-out property <string> tr-route-openrouter;
     in-out property <string> tr-route-polza;
     in-out property <string> microsoft-region;
 
-    // API keys: 0-4 AI providers, 5 Google, 6 DeepL, 7 Microsoft (same order as on the page)
-    in-out property <string> key-openrouter;
+    // API keys: 0-3 AI providers, 4 Google, 5 DeepL, 6 Microsoft (same order as on the page)
     in-out property <string> key-gemini;
     in-out property <string> key-mistral;
     in-out property <string> key-groq;
@@ -751,8 +749,8 @@ export component SettingsWindow inherits Window {
                             Card {
                                 SettingsRow {
                                     title: @tr("Engine");
-                                    description: root.ocr-provider == 5
-                                        ? @tr("Windows OCR runs on this PC. Nothing leaves your computer.")
+                                    description: root.ocr-provider == 4
+                                        ? @tr("Paddle OCR runs on this PC. Nothing leaves your computer; its model files are downloaded once, from the card below.")
                                         : @tr("A vision model reads the image. The selected area is sent to the provider.");
 
                                     Select {
@@ -763,78 +761,99 @@ export component SettingsWindow inherits Window {
                                 }
                             }
 
-                            if root.ocr-provider == 5: VerticalLayout {
+                            if root.ocr-provider == 4: VerticalLayout {
                                 spacing: 12px;
 
                                 Card {
                                     SettingsRow {
                                         title: @tr("Language");
-                                        description: @tr("Windows OCR reads one language at a time. Automatic picks one of your Windows languages; a Cyrillic or Asian one also reads Latin text.");
+                                        description: @tr("Automatic picks Slavic for a Slavic Windows language, English otherwise. The Slavic model reads Russian, Ukrainian and Belarusian; both also read the other's text.");
 
                                         Select {
                                             width: 240px;
-                                            model: root.ocr-languages;
-                                            current-index <=> root.ocr-language-index;
+                                            model: root.paddle-languages;
+                                            current-index <=> root.paddle-language-index;
+                                        }
+                                    }
+
+                                    Divider { }
+
+                                    SettingsRow {
+                                        title: @tr("Model files");
+                                        description: root.paddle-error != ""
+                                            ? root.paddle-error
+                                            : root.paddle-ready
+                                            ? @tr("Downloaded. Recognition runs entirely on this PC.")
+                                            : @tr("Not downloaded yet.");
+                                        description-color: root.paddle-error != "" ? Theme.coral : Theme.silver;
+
+                                        if root.paddle-downloading: HorizontalLayout {
+                                            spacing: 10px;
+
+                                            Rectangle {
+                                                width: 120px;
+                                                height: 6px;
+                                                border-radius: 3px;
+                                                background: Theme.veil;
+
+                                                Rectangle {
+                                                    x: 0;
+                                                    width: parent.width * min(1.0, root.paddle-progress);
+                                                    height: parent.height;
+                                                    border-radius: 3px;
+                                                    background: Theme.periwinkle;
+                                                }
+                                            }
+
+                                            Text {
+                                                text: @tr("Downloading…");
+                                                color: Theme.silver;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+
+                                        if !root.paddle-downloading && !root.paddle-ready: Button {
+                                            text: @tr("Download");
+                                            icon: @image-url("icons/download.svg");
+                                            clicked => {
+                                                root.download-paddle();
+                                            }
+                                        }
+
+                                        if root.paddle-ready: Tag {
+                                            text: @tr("Ready");
                                         }
                                     }
                                 }
 
-                                if root.ocr-capability != "": Note {
-                                    text: root.ocr-languages-missing
-                                        ? @tr("No OCR languages are installed on this PC. Install one from an administrator PowerShell:")
-                                        : @tr("To add another language, install its OCR component from an administrator PowerShell:");
-                                }
-
-                                if root.ocr-capability != "": Rectangle {
-                                    height: 36px;
-                                    border-radius: Theme.radius-sm;
-                                    background: Theme.iron;
-                                    border-width: 1px;
-                                    border-color: Theme.ring;
-
-                                    TextInput {
-                                        x: 12px;
-                                        width: parent.width - 24px;
-                                        vertical-alignment: center;
-                                        read-only: true;
-                                        text: "Add-WindowsCapability -Online -Name " + root.ocr-capability;
-                                        color: Theme.chalk;
-                                        font-family: Theme.mono-family;
-                                        selection-background-color: Theme.selection;
-                                    }
+                                if !root.paddle-ready && !root.paddle-downloading: Note {
+                                    text: @tr("Downloads {} of model files from the oar-ocr GitHub release into %APPDATA%\\Glance. Nothing leaves your computer.", root.paddle-size);
                                 }
                             }
 
                             if root.ocr-provider == 0: ModelCard {
-                                model <=> root.ocr-model-openrouter;
-                                default-model: root.ocr-default-openrouter;
-                                has-route: true;
-                                route <=> root.ocr-route-openrouter;
-                            }
-
-                            if root.ocr-provider == 1: ModelCard {
                                 model <=> root.ocr-model-gemini;
                                 default-model: root.ocr-default-gemini;
                             }
 
-                            if root.ocr-provider == 2: ModelCard {
+                            if root.ocr-provider == 1: ModelCard {
                                 model <=> root.ocr-model-mistral;
                                 default-model: root.ocr-default-mistral;
                             }
 
-                            if root.ocr-provider == 3: ModelCard {
+                            if root.ocr-provider == 2: ModelCard {
                                 model <=> root.ocr-model-groq;
                                 default-model: root.ocr-default-groq;
                             }
 
-                            if root.ocr-provider == 4: ModelCard {
+                            if root.ocr-provider == 3: ModelCard {
                                 model <=> root.ocr-model-polza;
                                 default-model: root.ocr-default-polza;
                                 has-route: true;
                                 route <=> root.ocr-route-polza;
                             }
 
-                            if root.ocr-provider < 5: Note {
+                            if root.ocr-provider < 4: Note {
                                 text: @tr("Only models that accept images are listed when the provider says which ones do.");
                             }
                         }
@@ -882,45 +901,38 @@ export component SettingsWindow inherits Window {
                             }
 
                             if root.translation-provider == 0: ModelCard {
-                                model <=> root.tr-model-openrouter;
-                                default-model: root.tr-default-openrouter;
-                                has-route: true;
-                                route <=> root.tr-route-openrouter;
-                            }
-
-                            if root.translation-provider == 1: ModelCard {
                                 model <=> root.tr-model-gemini;
                                 default-model: root.tr-default-gemini;
                             }
 
-                            if root.translation-provider == 2: ModelCard {
+                            if root.translation-provider == 1: ModelCard {
                                 model <=> root.tr-model-mistral;
                                 default-model: root.tr-default-mistral;
                             }
 
-                            if root.translation-provider == 3: ModelCard {
+                            if root.translation-provider == 2: ModelCard {
                                 model <=> root.tr-model-groq;
                                 default-model: root.tr-default-groq;
                             }
 
-                            if root.translation-provider == 4: ModelCard {
+                            if root.translation-provider == 3: ModelCard {
                                 model <=> root.tr-model-polza;
                                 default-model: root.tr-default-polza;
                                 has-route: true;
                                 route <=> root.tr-route-polza;
                             }
 
-                            if root.translation-provider == 5: Note {
+                            if root.translation-provider == 4: Note {
                                 text: root.key-google == ""
                                     ? @tr("Works without a key through Google's free web endpoint (unofficial, may be rate-limited). With a Cloud Translation key on the API Keys page, the official API is used.")
                                     : @tr("Uses the official Cloud Translation API with your key.");
                             }
 
-                            if root.translation-provider == 7 && root.key-microsoft == "": Note {
+                            if root.translation-provider == 6 && root.key-microsoft == "": Note {
                                 text: @tr("Microsoft Translator needs a key. The free tier (F0) of an Azure Translator resource covers 2 million characters a month.");
                             }
 
-                            if root.translation-provider == 7: Card {
+                            if root.translation-provider == 6: Card {
                                 SettingsRow {
                                     title: @tr("Region");
                                     description: @tr("The Azure region of your Translator resource, such as westeurope. Leave empty for a global resource.");
@@ -944,11 +956,6 @@ export component SettingsWindow inherits Window {
 
                             VerticalLayout {
                                 spacing: 8px;
-
-                                KeyCard {
-                                    provider: "OpenRouter";
-                                    value <=> root.key-openrouter;
-                                }
 
                                 KeyCard {
                                     provider: "Google Gemini";
@@ -1023,7 +1030,7 @@ export component SettingsWindow inherits Window {
                                         padding-bottom: 1px;
                                         Image {
                                             source: @image-url("images/slint-logo-gray.png");
-                                            height: 15px;
+                                            height: 19px;
                                             width: self.height * 512 / 153;
                                             colorize: Theme.silver;
                                         }

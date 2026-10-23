@@ -29,8 +29,9 @@ WebView, Electron и браузерных движков. В трее заним
 
 - **Любой текст на экране**: картинки, видео, игры, удалённый рабочий стол, PDF с запретом
   копирования.
-- **Распознавание** через Windows OCR (офлайн, бесплатно) или vision-модель от OpenRouter,
-  Google Gemini, Mistral AI, Groq или Polza AI.
+- **Распознавание** через Paddle OCR (офлайн и бесплатно; славянская модель читает
+  русский, украинский и белорусский, есть и английская — обе один раз скачиваются из
+  настроек), либо vision-модель от Google Gemini, Mistral AI, Groq или Polza AI.
 - **Перевод в один клик** через ИИ-модель, Google Translate (без ключа), DeepL или
   Microsoft Translator.
 - **Выбор модели**: поиск по названию или ID, обновление списка, любой свой ID модели.
@@ -53,12 +54,8 @@ WebView, Electron и браузерных движков. В трее заним
   <img src="docs/settings.png" width="690" alt="Настройки Glance">
 </p>
 
-Для Windows OCR нужен установленный язык OCR. В Windows 11 LTSC их нет; добавь из
-PowerShell от имени администратора:
-
-```powershell
-Add-WindowsCapability -Online -Name "Language.OCR~~~ru-RU~0.0.1.0"
-```
+Paddle OCR при первом включении скачивает файлы моделей (~12 МБ на язык) —
+в настройках, на странице «Recognition».
 
 ## API-ключи
 
@@ -67,7 +64,6 @@ Add-WindowsCapability -Online -Name "Language.OCR~~~ru-RU~0.0.1.0"
 
 | Провайдер | Где взять ключ |
 |---|---|
-| OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) |
 | Google Gemini | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 | Mistral AI | [console.mistral.ai/api-keys](https://console.mistral.ai/api-keys) |
 | Groq | [console.groq.com/keys](https://console.groq.com/keys) |

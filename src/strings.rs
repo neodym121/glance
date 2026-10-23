@@ -36,30 +36,29 @@ pub fn missing_key(provider: &str) -> String {
     format!("No API key for {provider}. Add one in Settings → API Keys.")
 }
 
-pub fn ocr_language_missing(language: &str, tag: &str) -> String {
-    format!(
-        "The Windows OCR language “{language}” is not installed. Install it from an administrator PowerShell:\n\
-         Add-WindowsCapability -Online -Name Language.OCR~~~{tag}~0.0.1.0\n\
-         Or pick another language in Glance Settings → Recognition."
-    )
-}
-
-pub fn ocr_no_languages(locale: &str) -> String {
-    format!(
-        "Windows OCR has no languages installed. Install one from an administrator PowerShell:\n\
-         Add-WindowsCapability -Online -Name Language.OCR~~~{locale}~0.0.1.0\n\
-         Or choose a cloud engine in Glance Settings → Recognition."
-    )
-}
-
-/// Locale tag for the OCR capability name, e.g. "ru-RU".
-pub fn ocr_capability_locale() -> String {
-    let locale = crate::win32::user_locale();
-    if locale.is_empty() { "en-US".to_owned() } else { locale }
-}
-
 pub fn deepl_unsupported(language: &str) -> String {
     format!("DeepL can't translate into {language}. Choose another language or provider in Settings → Translation.")
+}
+
+pub fn paddle_models_missing() -> String {
+    "The Paddle OCR models are not downloaded yet. Pick Paddle OCR in Settings → Recognition and press Download.".to_owned()
+}
+
+pub fn paddle_failed(detail: &str) -> String {
+    format!("Local recognition failed: {detail}")
+}
+
+pub fn paddle_download_failed(detail: &str) -> String {
+    format!("Could not download the Paddle OCR models: {detail}.")
+}
+
+pub fn paddle_corrupt(name: &str) -> String {
+    format!("The downloaded file {name} did not match its published checksum. Try again.")
+}
+
+/// "12.4 MB" for the Settings status line.
+pub fn paddle_size(bytes: u64) -> String {
+    format!("{bytes:.1} MB", bytes = bytes as f64 / 1_048_576.0)
 }
 
 pub const AUTOMATIC_LANGUAGE: &str = "Automatic";

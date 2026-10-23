@@ -111,7 +111,7 @@ fn parse(provider: AiProvider, response: &Value) -> Vec<ModelInfo> {
                     }
                     ModelInfo { name: id.clone(), id, vision: None }
                 }
-                AiProvider::OpenRouter | AiProvider::Polza => routed_model(entry, &text)?,
+                AiProvider::Polza => routed_model(entry, &text)?,
             };
             (!model.id.is_empty() && seen.insert(model.id.clone())).then_some(model)
         })
@@ -135,8 +135,8 @@ fn gemini_model(entry: &Value, text: &impl Fn(&Value, &str) -> String) -> Option
     Some(ModelInfo { id, name, vision: None })
 }
 
-/// OpenRouter and Polza AI describe modalities; Polza also lists image, speech and
-/// embedding models, which are left out.
+/// Polza AI describes modalities; it also lists image, speech and embedding
+/// models, which are left out.
 fn routed_model(entry: &Value, text: &impl Fn(&Value, &str) -> String) -> Option<ModelInfo> {
     if entry.get("type").and_then(Value::as_str).is_some_and(|kind| kind != "chat") {
         return None;

@@ -35,8 +35,9 @@ impl Default for Config {
 #[serde(default)]
 pub struct OcrConfig {
     pub provider: OcrProvider,
-    /// BCP-47 tag of the Windows OCR language; empty means the user profile languages.
-    pub language: String,
+    /// Script code of the Paddle OCR models (`ocr::paddle_models::SCRIPTS`);
+    /// empty means Automatic, picked from the Windows locale.
+    pub paddle_script: String,
     pub models: Models,
     pub routes: Routes,
 }
@@ -72,7 +73,6 @@ impl Default for TranslationConfig {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Models {
-    pub openrouter: String,
     pub gemini: String,
     pub mistral: String,
     pub groq: String,
@@ -82,7 +82,6 @@ pub struct Models {
 impl Models {
     pub fn get(&self, provider: AiProvider) -> &str {
         match provider {
-            AiProvider::OpenRouter => &self.openrouter,
             AiProvider::Gemini => &self.gemini,
             AiProvider::Mistral => &self.mistral,
             AiProvider::Groq => &self.groq,
@@ -91,20 +90,18 @@ impl Models {
     }
 }
 
-/// Upstream providers to send requests to, for the services that route between many
-/// (OpenRouter, Polza AI): a provider ID or a comma-separated list; empty lets the
-/// service choose.
+/// Upstream providers to send requests to, for services that route between many
+/// (Polza AI): a provider ID or a comma-separated list; empty lets the service
+/// choose.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Routes {
-    pub openrouter: String,
     pub polza: String,
 }
 
 impl Routes {
     pub fn get(&self, provider: AiProvider) -> &str {
         match provider {
-            AiProvider::OpenRouter => &self.openrouter,
             AiProvider::Polza => &self.polza,
             _ => "",
         }
@@ -157,14 +154,15 @@ mod tests {
         let config: Config = serde_json::from_str(r#"{ "auto_copy": false }"#).unwrap();
         assert!(!config.auto_copy);
         assert_eq!(config.hotkey, DEFAULT_HOTKEY);
-        assert_eq!(config.ocr.provider, OcrProvider::OpenRouter);
+        assert_eq!(config.ocr.provider, OcrProvider::Paddle);
         assert!(!config.translation.auto);
     }
 
     #[test]
     fn round_trips_through_json() {
         let mut config = Config::default();
-        config.ocr.provider = OcrProvider::Groq;
+        config.ocr.provider = OcrProvider::Paddle;
+        config.ocr.paddle_script = "eslav".into();
         config.ocr.models.groq = "some/model".into();
         config.ocr.routes.polza = "Amazon Bedrock".into();
         config.translation.provider = TranslationProvider::DeepL;

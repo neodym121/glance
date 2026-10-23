@@ -1,6 +1,6 @@
 [package]
 name = "glance"
-version = "0.0.2-beta"
+version = "0.0.3-beta"
 edition = "2024"
 description = "Screen OCR and translation from the Windows system tray"
 license = "MIT"
@@ -30,19 +30,17 @@ ureq = { version = "3.5.0", default-features = false, features = [
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 png = "0.18.1"
+# Local OCR (PP-OCRv5): ONNX Runtime is linked in as prebuilt static binaries by
+# the default `download-binaries` feature, so no DLL ships with the exe.
+oar-ocr = { version = "0.10.1", default-features = false, features = ["download-binaries", "simd"] }
+# Only to build the `image::RgbImage` values oar-ocr's predict() takes.
+image = { version = "0.25", default-features = false }
+# Verifies downloaded Paddle OCR model files against their published hashes.
+sha2 = "0.10"
 
 [dependencies.windows]
 version = "0.62.2"
 features = [
-    # WinRT: Windows.Media.Ocr and the types it needs
-    "Foundation",
-    "Foundation_Collections",
-    "Globalization",
-    "Graphics_Imaging",
-    "Media_Ocr",
-    "Security_Cryptography",
-    "Storage_Streams",
-    "System_UserProfile",
     # Win32
     "Win32_Foundation",
     "Win32_Globalization",
@@ -57,7 +55,6 @@ features = [
     "Win32_System_Ole",
     "Win32_System_Registry",
     "Win32_System_Threading",
-    "Win32_System_WinRT",
     "Win32_UI_HiDpi",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",

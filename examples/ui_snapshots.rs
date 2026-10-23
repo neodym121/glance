@@ -83,9 +83,7 @@ fn main() {
         ("popup-recognizing", PopupState::Recognizing, "", "", false),
         ("popup-text", PopupState::Text, text, "", false),
         ("popup-translation", PopupState::Text, "Glance распознаёт текст в выделенной области и показывает его здесь.", "", true),
-        ("popup-error", PopupState::Error, "", "Windows OCR has no languages installed. Install one from an administrator PowerShell:
-Add-WindowsCapability -Online -Name Language.OCR~~~ru-RU~0.0.1.0
-Or choose a cloud engine in Glance Settings → Recognition.", false),
+        ("popup-error", PopupState::Error, "", "The Paddle OCR models are not downloaded yet. Pick Paddle OCR in Settings → Recognition and press Download.", false),
     ] {
         let popup = ResultPopup::new().unwrap();
         let window = last_window();
@@ -100,7 +98,7 @@ Or choose a cloud engine in Glance Settings → Recognition.", false),
             popup.set_status("Copied to clipboard".into());
             popup.set_status_ok(true);
         } else {
-            popup.set_status(if translated { "DeepL · Russian" } else { "Windows OCR" }.into());
+            popup.set_status(if translated { "DeepL · Russian" } else { "Paddle OCR · East Slavic" }.into());
         }
         popup.show().unwrap();
         render(&window, scale, popup.get_popup_width(), popup.get_desired_height(), &out.join(format!("{name}.png")));
@@ -121,21 +119,18 @@ Or choose a cloud engine in Glance Settings → Recognition.", false),
         settings.set_page(page);
         settings.set_hotkey("Ctrl+Alt+S".into());
         settings.set_auto_copy(true);
-        settings.set_ocr_providers(strings(&["OpenRouter", "Google Gemini", "Mistral AI", "Groq", "Polza AI", "Windows OCR (on this PC)"]));
-        settings.set_ocr_provider(if page == 1 { 4 } else { 0 });
-        settings.set_ocr_languages(strings(&["Automatic", "English (United States)", "Russian"]));
-        settings.set_ocr_languages_missing(true);
-        settings.set_ocr_capability("Language.OCR~~~ru-RU~0.0.1.0".into());
+        settings.set_ocr_providers(strings(&["Google Gemini", "Mistral AI", "Groq", "Polza AI", "Paddle OCR"]));
+        settings.set_ocr_provider(if page == 1 { 3 } else { 0 });
         settings.set_ocr_default_polza("google/gemini-3.1-flash-lite".into());
         settings.set_ocr_route_polza("google-vertex/global".into());
-        settings.set_key_openrouter("sk-or-v1-0000000000".into());
+        settings.set_key_gemini("AIza-0000000000".into());
         settings.set_translation_providers(strings(&[
-            "OpenRouter", "Google Gemini", "Mistral AI", "Groq", "Polza AI", "Google Translate", "DeepL", "Microsoft Translator",
+            "Google Gemini", "Mistral AI", "Groq", "Polza AI", "Google Translate", "DeepL", "Microsoft Translator",
         ]));
-        settings.set_translation_provider(if page == 2 { 1 } else { 6 });
+        settings.set_translation_provider(if page == 2 { 0 } else { 6 });
         settings.set_target_languages(strings(&["English", "German", "Russian"]));
         settings.set_target_language_index(2);
-        settings.set_version("0.0.2-beta".into());
+        settings.set_version("0.0.3-beta".into());
         let list = settings.global::<ModelList>();
         let (items, query): (Vec<ModelItem>, &str) = if page == 2 {
             (vec![ModelItem { id: "my-org/custom-model".into(), name: "my-org/custom-model".into(), custom: true }], "my-org/custom-model")
@@ -147,6 +142,25 @@ Or choose a cloud engine in Glance Settings → Recognition.", false),
         list.set_selected("Google: Gemini 3.1 Flash Lite (default)".into());
         settings.show().unwrap();
         render(&window, scale, 920.0, 900.0, &out.join(format!("settings-{page}.png")));
+    }
+
+    // Recognition with the Paddle engine: models ready, then mid-download.
+    for (name, ready, downloading, progress) in
+        [("settings-5", true, false, 0.0), ("settings-6", false, true, 0.42)]
+    {
+        let settings = SettingsWindow::new().unwrap();
+        let window = last_window();
+        settings.set_page(1);
+        settings.set_ocr_providers(strings(&["Google Gemini", "Mistral AI", "Groq", "Polza AI", "Paddle OCR"]));
+        settings.set_ocr_provider(4);
+        settings.set_paddle_languages(strings(&["Automatic", "Slavic", "English"]));
+        settings.set_paddle_language_index(1);
+        settings.set_paddle_ready(ready);
+        settings.set_paddle_downloading(downloading);
+        settings.set_paddle_progress(progress as f32);
+        settings.set_paddle_size("12.4 MB".into());
+        settings.show().unwrap();
+        render(&window, scale, 920.0, 900.0, &out.join(format!("{name}.png")));
     }
 
     // Capture overlay with a selection being dragged.

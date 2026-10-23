@@ -42,6 +42,9 @@ pub enum Action {
     ModelsFilter,
     ModelsPicked,
     ModelsLoaded { provider: AiProvider, result: Result<Vec<ModelInfo>> },
+    PaddleDownload,
+    PaddleDownloadProgress { done: u64, total: u64 },
+    PaddleDownloadDone { result: Result<()> },
 }
 
 /// Queues an action for the UI thread. Safe to call from any thread.
@@ -220,6 +223,21 @@ impl App {
                     settings.models_loaded(provider, result);
                 }
             }
+            Action::PaddleDownload => {
+                if let Some(settings) = self.settings.as_mut() {
+                    settings.start_paddle_download();
+                }
+            }
+            Action::PaddleDownloadProgress { done, total } => {
+                if let Some(settings) = self.settings.as_mut() {
+                    settings.paddle_progress(done, total);
+                }
+            }
+            Action::PaddleDownloadDone { result } => {
+                if let Some(settings) = self.settings.as_mut() {
+                    settings.paddle_download_done(result);
+                }
+            }
         }
     }
 
@@ -345,6 +363,10 @@ impl App {
     /// Applies whatever changed in the open settings window since the last poll.
     /// Settings save themselves: there is no Save button.
     fn poll_settings(&mut self) {
+        if let Some(settings) = self.settings.as_ref() {
+            // A new Paddle language changes what counts as downloaded.
+            settings.update_paddle();
+        }
         let Some((now, keys)) = self.settings.as_ref().map(|s| {
             let now = s.read(&self.config);
             let keys = settings::key_changes(&s.applied().keys, &now.keys);

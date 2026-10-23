@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Glance is a Windows-only tray app (Rust 2024, [Slint](https://slint.dev) UI): a global hotkey freezes the screen, the user drags over text, and the selection is recognized (Windows OCR or a cloud vision model) and optionally translated. No WebView or browser engine; idle memory (~2 MB) is a deliberate design goal.
+Glance is a Windows-only tray app (Rust 2024, [Slint](https://slint.dev) UI): a global hotkey freezes the screen, the user drags over text, and the selection is recognized (local Paddle OCR or a cloud vision model) and optionally translated. No WebView or browser engine; idle memory (~2 MB) is a deliberate design goal.
 
 ## Commands
 
@@ -12,6 +12,7 @@ cargo test --locked                       # all unit tests (they live inline in 
 cargo test --locked enlarges_small_crops  # one test, or every test whose path contains the filter
 cargo run -- --settings                   # `--settings` opens the settings window at start
 cargo run --example ui_snapshots -- <out-dir> [scale] [frame.png]   # renders every window to PNG, offscreen
+cargo run --example paddle_smoke -- <image.png> [script-code]      # runs local Paddle OCR on an image, prints text + timing
 python tools/make_icons.py                # regenerates assets/*.ico and glance.png (stdlib only)
 ```
 
@@ -27,10 +28,10 @@ python tools/make_icons.py                # regenerates assets/*.ico and glance.
 
 **Capture → text pipeline**
 1. `capture.rs` takes one GDI `BitBlt` per monitor into a `Frame` (original + half-brightness copy). `overlay.rs` opens one frameless window per monitor showing them; the selection is cut from the *original* frame in Rust (never from what is drawn), so the scrim/hint can't reach recognition. The crop is padded with its border color (`RECOGNITION_PAD`) so edge glyphs aren't clipped.
-2. `ocr::spawn` runs a worker thread: `recognizer_for` builds a `Recognizer` (`windows_ocr::WindowsOcr` or `vision::VisionOcr`), reading the API key from Credential Manager on that thread. Both engines enlarge small crops (3x, else 2x; ratios were measured, see comments) before recognizing.
+2. `ocr::spawn` runs a worker thread: `recognizer_for` builds a `Recognizer` (`paddle::PaddleOcr`, the local engine, or `vision::VisionOcr`), reading the API key from Credential Manager on that thread. Both engines enlarge small crops before recognizing (3x, else 2x; ratios were measured, see comments). `paddle.rs` caps the enlargement at the detector's 960 px input, builds its engine from files in `%APPDATA%\Glance\models\paddle-ocrv5` and drops it after one recognition; `paddle_models.rs` holds the script table (names, sizes, SHA-256 from the oar-ocr model registry) and the Settings download with progress. Line joining (`join_lines`) lives in `ocr/mod.rs`.
 3. `popup.rs` shows the result card; Translate calls `translate::spawn` (a `Translator` trait: AI chat, Google free/paid, DeepL, Microsoft). Only text is sent for translation, never the image.
 
-**Providers** (`providers.rs`): `AiProvider` (OpenAI-compatible chat: OpenRouter, Gemini, Mistral, Groq, Polza) is shared by vision OCR (`ocr/vision.rs`) and translation via `llm::chat`. `OcrProvider`/`TranslationProvider` extend it with Windows OCR and the non-chat translators. The order of the `ALL` lists is the order of the Settings pickers (AI providers first, same order; a test enforces it), so index-based UI code depends on it. Adding an AI provider touches `providers.rs`, `config.rs` (`Models`/`Routes`), `models.rs` (list parsing), `settings.rs` + `ui/settings.slint` (per-provider properties), and `Secret`.
+**Providers** (`providers.rs`): `AiProvider` (OpenAI-compatible chat: Gemini, Mistral, Groq, Polza) is shared by vision OCR (`ocr/vision.rs`) and translation via `llm::chat`. `OcrProvider`/`TranslationProvider` extend it with the local Paddle engine and the non-chat translators. Retired provider ids ("openrouter", "windows") deserialize to the default via `serde(other)`, so old configs keep loading. The order of the `ALL` lists is the order of the Settings pickers (AI providers first, same order; a test enforces it), so index-based UI code depends on it. Adding an AI provider touches `providers.rs`, `config.rs` (`Models`/`Routes`), `models.rs` (list parsing), `settings.rs` + `ui/settings.slint` (per-provider properties), and `Secret`.
 
 **Config and secrets.** `config.rs` → `%APPDATA%\Glance\config.json` (plus `models.json`, a model-list cache), atomic writes, `#[serde(default)]` everywhere so new fields stay backward compatible. API keys never go in the config (a test checks field names); they live in Windows Credential Manager (`secrets.rs`, targets `Glance:<provider>`). All HTTP goes through `http.rs`, which builds a fresh client per request and scrubs the key from every error message (`redact`); `error::Error` is a user-facing message string, so build it only from redacted text.
 

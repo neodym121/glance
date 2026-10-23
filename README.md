@@ -28,8 +28,9 @@ browser engine. Idle in the tray it uses about **2 MB of memory**.
 ## Features
 
 - **Any text on screen**: images, videos, games, remote desktops, PDFs that block copying.
-- **Recognition** with Windows OCR (offline, free) or a vision model from OpenRouter,
-  Google Gemini, Mistral AI, Groq or Polza AI.
+- **Recognition** with Paddle OCR (offline and free; the Slavic model reads Russian,
+  Ukrainian and Belarusian, and there is an English one — both download once from
+  Settings), or a vision model from Google Gemini, Mistral AI, Groq or Polza AI.
 - **One-click translation** with an AI model, Google Translate (no key needed), DeepL or
   Microsoft Translator.
 - **Model picker**: search by name or ID, refresh the list, or use any model ID.
@@ -52,12 +53,8 @@ Settings open on the first launch, later from the tray menu.
   <img src="docs/settings.png" width="690" alt="Glance settings">
 </p>
 
-Windows OCR needs an OCR language installed. Windows 11 LTSC has none; add one from an
-administrator PowerShell:
-
-```powershell
-Add-WindowsCapability -Online -Name "Language.OCR~~~en-US~0.0.1.0"
-```
+Paddle OCR downloads its model files (~12 MB per language) on first use, from
+Settings → Recognition.
 
 ## API keys
 
@@ -66,7 +63,6 @@ One key per provider serves both recognition and translation. Paste it on the
 
 | Provider | Where to get a key |
 |---|---|
-| OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) |
 | Google Gemini | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 | Mistral AI | [console.mistral.ai/api-keys](https://console.mistral.ai/api-keys) |
 | Groq | [console.groq.com/keys](https://console.groq.com/keys) |

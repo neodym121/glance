@@ -57,10 +57,18 @@ enum Scroll {
     Selected,
 }
 
+/// The Paddle OCR model download shown on the Recognition page.
+enum PaddleState {
+    Idle,
+    Downloading { done: u64, total: u64 },
+    Failed(String),
+}
+
 pub struct Settings {
     window: SettingsWindow,
-    /// BCP-47 tags behind the OCR language list; "" is Automatic.
-    ocr_tags: Vec<String>,
+    /// Script codes behind the Paddle language list; "" is Automatic.
+    paddle_codes: Vec<String>,
+    paddle: PaddleState,
     applied: Snapshot,
     /// Model lists per provider: the cache file, refreshed by fetches.
     catalog: Catalog,
@@ -74,7 +82,6 @@ pub struct Settings {
 
 fn set_key(window: &SettingsWindow, secret: Secret, value: SharedString) {
     match secret {
-        Secret::OpenRouter => window.set_key_openrouter(value),
         Secret::Gemini => window.set_key_gemini(value),
         Secret::Mistral => window.set_key_mistral(value),
         Secret::Groq => window.set_key_groq(value),
@@ -87,7 +94,6 @@ fn set_key(window: &SettingsWindow, secret: Secret, value: SharedString) {
 
 fn key(window: &SettingsWindow, secret: Secret) -> SharedString {
     match secret {
-        Secret::OpenRouter => window.get_key_openrouter(),
         Secret::Gemini => window.get_key_gemini(),
         Secret::Mistral => window.get_key_mistral(),
         Secret::Groq => window.get_key_groq(),
@@ -103,7 +109,6 @@ fn model_setting(window: &SettingsWindow, provider: AiProvider, purpose: Purpose
     match purpose {
         Purpose::Recognition => (
             match provider {
-                AiProvider::OpenRouter => window.get_ocr_model_openrouter(),
                 AiProvider::Gemini => window.get_ocr_model_gemini(),
                 AiProvider::Mistral => window.get_ocr_model_mistral(),
                 AiProvider::Groq => window.get_ocr_model_groq(),
@@ -113,7 +118,6 @@ fn model_setting(window: &SettingsWindow, provider: AiProvider, purpose: Purpose
         ),
         Purpose::Translation => (
             match provider {
-                AiProvider::OpenRouter => window.get_tr_model_openrouter(),
                 AiProvider::Gemini => window.get_tr_model_gemini(),
                 AiProvider::Mistral => window.get_tr_model_mistral(),
                 AiProvider::Groq => window.get_tr_model_groq(),
@@ -126,16 +130,6 @@ fn model_setting(window: &SettingsWindow, provider: AiProvider, purpose: Purpose
 
 fn string_model(items: impl IntoIterator<Item = String>) -> ModelRc<SharedString> {
     ModelRc::from(Rc::new(VecModel::from(items.into_iter().map(SharedString::from).collect::<Vec<_>>())))
-}
-
-/// The OCR language worth suggesting: the user's own, else English; `None` when both
-/// are already installed.
-fn suggest_ocr_language(locale: &str, installed: &[&str]) -> Option<String> {
-    let primary = |tag: &str| tag.split('-').next().unwrap_or("").to_ascii_lowercase();
-    [locale, "en-US"]
-        .into_iter()
-        .find(|candidate| !installed.iter().any(|tag| primary(tag) == primary(candidate)))
-        .map(str::to_owned)
 }
 
 /// The window has size limits and no maximize button, but Slint enables maximizing for
@@ -166,29 +160,23 @@ impl Settings {
         window.set_ocr_providers(string_model(OcrProvider::ALL.iter().map(|p| p.name().to_owned())));
         let provider_index = OcrProvider::ALL.iter().position(|p| *p == config.ocr.provider).unwrap_or(0);
         window.set_ocr_provider(provider_index as i32);
-        let installed = ocr::available_languages();
-        window.set_ocr_languages_missing(installed.is_empty());
-        let installed_tags: Vec<&str> = installed.iter().map(|(tag, _)| tag.as_str()).collect();
-        let suggestion = suggest_ocr_language(&strings::ocr_capability_locale(), &installed_tags);
-        window.set_ocr_capability(suggestion.map(|tag| format!("Language.OCR~~~{tag}~0.0.1.0")).unwrap_or_default().into());
-        let mut ocr_tags = vec![String::new()];
-        let mut labels = vec![strings::AUTOMATIC_LANGUAGE.to_owned()];
-        for (tag, name) in installed {
-            ocr_tags.push(tag);
-            labels.push(name);
+
+        // Paddle OCR: Automatic plus one entry per script.
+        let mut paddle_codes = vec![String::new()];
+        let mut paddle_labels = vec![strings::AUTOMATIC_LANGUAGE.to_owned()];
+        for script in ocr::paddle_models::SCRIPTS {
+            paddle_codes.push(script.code.to_owned());
+            paddle_labels.push(script.label.to_owned());
         }
-        let configured = config.ocr.language.trim();
-        if !configured.is_empty() && !ocr_tags.iter().any(|t| t.eq_ignore_ascii_case(configured)) {
-            // Keep a language that was uninstalled meanwhile visible instead of silently switching.
-            ocr_tags.push(configured.to_owned());
-            labels.push(format!("{configured} (not installed)"));
-        }
-        let ocr_index = ocr_tags.iter().position(|t| t.eq_ignore_ascii_case(configured)).unwrap_or(0);
-        window.set_ocr_languages(string_model(labels));
-        window.set_ocr_language_index(ocr_index as i32);
+        let paddle_index = paddle_codes
+            .iter()
+            .position(|c| c.eq_ignore_ascii_case(config.ocr.paddle_script.trim()))
+            .unwrap_or(0);
+        window.set_paddle_languages(string_model(paddle_labels));
+        window.set_paddle_language_index(paddle_index as i32);
+        window.on_download_paddle(|| app::post(Action::PaddleDownload));
+
         let models = &config.ocr.models;
-        window.set_ocr_model_openrouter(models.openrouter.as_str().into());
-        window.set_ocr_default_openrouter(AiProvider::OpenRouter.default_vision_model().into());
         window.set_ocr_model_gemini(models.gemini.as_str().into());
         window.set_ocr_default_gemini(AiProvider::Gemini.default_vision_model().into());
         window.set_ocr_model_mistral(models.mistral.as_str().into());
@@ -197,7 +185,6 @@ impl Settings {
         window.set_ocr_default_groq(AiProvider::Groq.default_vision_model().into());
         window.set_ocr_model_polza(models.polza.as_str().into());
         window.set_ocr_default_polza(AiProvider::Polza.default_vision_model().into());
-        window.set_ocr_route_openrouter(config.ocr.routes.openrouter.as_str().into());
         window.set_ocr_route_polza(config.ocr.routes.polza.as_str().into());
 
         // Translation
@@ -209,8 +196,6 @@ impl Settings {
         let target = languages::index_of(&translation.target).or_else(|| languages::index_of("en")).unwrap_or(0);
         window.set_target_language_index(target as i32);
         window.set_auto_translate(translation.auto);
-        window.set_tr_model_openrouter(translation.models.openrouter.as_str().into());
-        window.set_tr_default_openrouter(AiProvider::OpenRouter.default_text_model().into());
         window.set_tr_model_gemini(translation.models.gemini.as_str().into());
         window.set_tr_default_gemini(AiProvider::Gemini.default_text_model().into());
         window.set_tr_model_mistral(translation.models.mistral.as_str().into());
@@ -219,7 +204,6 @@ impl Settings {
         window.set_tr_default_groq(AiProvider::Groq.default_text_model().into());
         window.set_tr_model_polza(translation.models.polza.as_str().into());
         window.set_tr_default_polza(AiProvider::Polza.default_text_model().into());
-        window.set_tr_route_openrouter(translation.routes.openrouter.as_str().into());
         window.set_tr_route_polza(translation.routes.polza.as_str().into());
         window.set_microsoft_region(translation.microsoft_region.as_str().into());
 
@@ -253,7 +237,8 @@ impl Settings {
         poll.start(slint::TimerMode::Repeated, Duration::from_millis(400), || app::post(Action::SettingsPoll));
         let mut settings = Self {
             window,
-            ocr_tags,
+            paddle_codes,
+            paddle: PaddleState::Idle,
             applied: Snapshot { config: config.clone(), keys: Vec::new(), autostart: false },
             catalog: models::load_cache(),
             loading: Vec::new(),
@@ -263,6 +248,7 @@ impl Settings {
         };
         settings.applied = settings.read(config);
         settings.update_picker();
+        settings.update_paddle();
         Ok(settings)
     }
 
@@ -284,16 +270,15 @@ impl Settings {
         config.auto_copy = w.get_auto_copy();
 
         config.ocr.provider = OcrProvider::ALL.get(w.get_ocr_provider() as usize).copied().unwrap_or_default();
-        config.ocr.language = self.ocr_tags.get(w.get_ocr_language_index() as usize).cloned().unwrap_or_default();
+        config.ocr.paddle_script =
+            self.paddle_codes.get(w.get_paddle_language_index() as usize).cloned().unwrap_or_default();
         config.ocr.models = Models {
-            openrouter: text(w.get_ocr_model_openrouter()),
             gemini: text(w.get_ocr_model_gemini()),
             mistral: text(w.get_ocr_model_mistral()),
             groq: text(w.get_ocr_model_groq()),
             polza: text(w.get_ocr_model_polza()),
         };
-        config.ocr.routes =
-            Routes { openrouter: text(w.get_ocr_route_openrouter()), polza: text(w.get_ocr_route_polza()) };
+        config.ocr.routes = Routes { polza: text(w.get_ocr_route_polza()) };
 
         let translation = &mut config.translation;
         translation.provider =
@@ -303,14 +288,12 @@ impl Settings {
         }
         translation.auto = w.get_auto_translate();
         translation.models = Models {
-            openrouter: text(w.get_tr_model_openrouter()),
             gemini: text(w.get_tr_model_gemini()),
             mistral: text(w.get_tr_model_mistral()),
             groq: text(w.get_tr_model_groq()),
             polza: text(w.get_tr_model_polza()),
         };
-        translation.routes =
-            Routes { openrouter: text(w.get_tr_route_openrouter()), polza: text(w.get_tr_route_polza()) };
+        translation.routes = Routes { polza: text(w.get_tr_route_polza()) };
         translation.microsoft_region = text(w.get_microsoft_region());
 
         let keys = Secret::ALL.iter().map(|&secret| (secret, text(key(w, secret)))).collect();
@@ -456,6 +439,59 @@ impl Settings {
         }
     }
 
+    /// Pushes the Paddle model state to the window: ready, missing (with the bytes
+    /// a download would move), a running download's progress, or the last error.
+    pub fn update_paddle(&self) {
+        let w = &self.window;
+        let code = self.paddle_codes.get(w.get_paddle_language_index() as usize).map(String::as_str).unwrap_or("");
+        let script = ocr::paddle_models::resolve(code);
+        let (ready, downloading, progress, error) = match &self.paddle {
+            PaddleState::Idle => (ocr::paddle_models::paths(script).is_some(), false, 0.0, String::new()),
+            PaddleState::Downloading { done, total } => {
+                (false, true, *done as f32 / (*total).max(1) as f32, String::new())
+            }
+            PaddleState::Failed(message) => (false, false, 0.0, message.clone()),
+        };
+        w.set_paddle_ready(ready);
+        w.set_paddle_downloading(downloading);
+        w.set_paddle_progress(progress.clamp(0.0, 1.0));
+        w.set_paddle_error(error.into());
+        w.set_paddle_size(strings::paddle_size(ocr::paddle_models::download_size(script)).into());
+    }
+
+    /// Starts downloading the models of the language picked on screen. Clicks while
+    /// a download runs are ignored; the progress bar replaces the button by then.
+    pub fn start_paddle_download(&mut self) {
+        if matches!(self.paddle, PaddleState::Downloading { .. }) {
+            return;
+        }
+        let code = self
+            .paddle_codes
+            .get(self.window.get_paddle_language_index() as usize)
+            .cloned()
+            .unwrap_or_default();
+        let script = ocr::paddle_models::resolve(&code);
+        let total = ocr::paddle_models::download_size(script);
+        self.paddle = PaddleState::Downloading { done: 0, total };
+        self.update_paddle();
+        ocr::paddle_models::spawn(script);
+    }
+
+    pub fn paddle_progress(&mut self, done: u64, total: u64) {
+        if let PaddleState::Downloading { .. } = self.paddle {
+            self.paddle = PaddleState::Downloading { done, total };
+            self.update_paddle();
+        }
+    }
+
+    pub fn paddle_download_done(&mut self, result: Result<()>) {
+        self.paddle = match result {
+            Ok(()) => PaddleState::Idle,
+            Err(e) => PaddleState::Failed(e.to_string()),
+        };
+        self.update_paddle();
+    }
+
     pub fn set_error(&self, message: &str) {
         self.window.set_error_text(message.into());
     }
@@ -483,13 +519,5 @@ mod tests {
         assert!(matches!(changes[0], KeyChange::Store(Secret::Groq, ref v) if v == "gsk_1"));
         assert!(matches!(changes[1], KeyChange::Delete(Secret::DeepL)));
         assert!(key_changes(&now, &now).is_empty());
-    }
-
-    #[test]
-    fn suggests_a_missing_ocr_language() {
-        assert_eq!(suggest_ocr_language("ru-RU", &[]).as_deref(), Some("ru-RU"));
-        assert_eq!(suggest_ocr_language("ru-RU", &["ru"]).as_deref(), Some("en-US"));
-        assert_eq!(suggest_ocr_language("ru-RU", &["ru", "en-US"]), None);
-        assert_eq!(suggest_ocr_language("en-GB", &["en-US"]), None);
     }
 }
