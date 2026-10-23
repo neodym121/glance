@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.0.1--beta-7698fd?style=flat-square" alt="Версия 0.0.1-beta">
+  <img src="https://img.shields.io/badge/version-0.0.2--beta-7698fd?style=flat-square" alt="Версия 0.0.2-beta">
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4?style=flat-square" alt="Windows 10 и 11">
   <img src="https://img.shields.io/badge/Rust-2026-dea584?style=flat-square&logo=rust&logoColor=white" alt="Rust 2026">
   <img src="https://img.shields.io/badge/UI-Slint-2379f4?style=flat-square" alt="Интерфейс на Slint">

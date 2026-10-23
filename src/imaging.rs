@@ -4,6 +4,7 @@ use crate::error::{Error, Result};
 
 /// RGB, 8 bits per channel, rows top to bottom without padding. Screen captures
 /// have no meaningful alpha, so it is not stored.
+#[derive(Clone)]
 pub struct RgbImage {
     pub width: u32,
     pub height: u32,
@@ -27,6 +28,58 @@ impl RgbImage {
         Self { width, height, pixels: resample(&self.pixels, self.width, self.height, 3, width, height) }
     }
 
+    /// The image surrounded by `pad` pixels of its border color. Selections are drawn
+    /// tight to the text, and glyphs touching the crop edge get cut; a margin colored
+    /// like the background around them keeps the shapes intact for recognition.
+    pub fn padded(&self, pad: u32) -> Self {
+        if pad == 0 {
+            return Self { width: self.width, height: self.height, pixels: self.pixels.clone() };
+        }
+        let [r, g, b] = self.border_color();
+        let (width, height) = (self.width as usize, self.height as usize);
+        let (new_width, new_height) = (width + pad as usize * 2, height + pad as usize * 2);
+        let mut pixels = Vec::with_capacity(new_width * new_height * 3);
+        let pad_row = [r, g, b].repeat(new_width);
+        let pad_side = [r, g, b].repeat(pad as usize);
+        for _ in 0..pad {
+            pixels.extend_from_slice(&pad_row);
+        }
+        for row in self.pixels.chunks_exact(width * 3) {
+            pixels.extend_from_slice(&pad_side);
+            pixels.extend_from_slice(row);
+            pixels.extend_from_slice(&pad_side);
+        }
+        for _ in 0..pad {
+            pixels.extend_from_slice(&pad_row);
+        }
+        Self { width: new_width as u32, height: new_height as u32, pixels }
+    }
+
+    /// Average color of the outermost pixel frame: the background the selection was
+    /// drawn on, even when a gradient or a corner glyph touches the edge.
+    fn border_color(&self) -> [u8; 3] {
+        let (w, h) = (self.width as usize, self.height as usize);
+        let at = |x: usize, y: usize| (y * w + x) * 3;
+        let mut sum = [0u64; 3];
+        let mut samples = 0u64;
+        let mut add = |i: usize| {
+            for (channel, total) in sum.iter_mut().enumerate() {
+                *total += self.pixels[i + channel] as u64;
+            }
+            samples += 1;
+        };
+        for x in 0..w {
+            add(at(x, 0));
+            add(at(x, h - 1));
+        }
+        for y in 0..h {
+            add(at(0, y));
+            add(at(w - 1, y));
+        }
+        let avg = samples.max(1);
+        [(sum[0] / avg) as u8, (sum[1] / avg) as u8, (sum[2] / avg) as u8]
+    }
+
     pub fn encode_png(&self) -> Result<Vec<u8>> {
         let mut out = Vec::new();
         let mut encoder = png::Encoder::new(&mut out, self.width, self.height);
@@ -41,7 +94,8 @@ impl RgbImage {
 }
 
 /// Resamples interleaved 8-bit pixels with `channels` channels: box average when
-/// shrinking, bilinear when growing.
+/// shrinking, Catmull-Rom bicubic when growing. The cubic kernel is sharp enough to
+/// keep upscaled glyphs legible where bilinear washed them out.
 pub fn resample(source: &[u8], width: u32, height: u32, channels: usize, new_width: u32, new_height: u32) -> Vec<u8> {
     if (new_width, new_height) == (width, height) {
         return source.to_vec();
@@ -72,18 +126,36 @@ pub fn resample(source: &[u8], width: u32, height: u32, channels: usize, new_wid
             } else {
                 let fx = ((tx as f32 + 0.5) * sx - 0.5).max(0.0);
                 let fy = ((ty as f32 + 0.5) * sy - 0.5).max(0.0);
-                let (x0, y0) = (fx as u32, fy as u32);
-                let (x1, y1) = ((x0 + 1).min(width - 1), (y0 + 1).min(height - 1));
-                let (wx, wy) = (fx - x0 as f32, fy - y0 as f32);
+                let (x0, y0) = (fx.floor() as i32, fy.floor() as i32);
                 for c in 0..channels {
-                    let top = at(x0, y0, c) + (at(x1, y0, c) - at(x0, y0, c)) * wx;
-                    let bottom = at(x0, y1, c) + (at(x1, y1, c) - at(x0, y1, c)) * wx;
-                    out[base + c] = (top + (bottom - top) * wy).round().clamp(0.0, 255.0) as u8;
+                    let mut sum = 0.0;
+                    for dy in -1..=2 {
+                        let y = (y0 + dy).clamp(0, height as i32 - 1) as u32;
+                        let wy = cubic(fy - y0 as f32 - dy as f32);
+                        for dx in -1..=2 {
+                            let x = (x0 + dx).clamp(0, width as i32 - 1) as u32;
+                            sum += at(x, y, c) * cubic(fx - x0 as f32 - dx as f32) * wy;
+                        }
+                    }
+                    out[base + c] = sum.round().clamp(0.0, 255.0) as u8;
                 }
             }
         }
     }
     out
+}
+
+/// Catmull-Rom kernel (B = 0, C = 0.5): interpolating, so a uniform image stays
+/// uniform, with just enough negative lobes to keep edges crisp.
+fn cubic(t: f32) -> f32 {
+    let t = t.abs();
+    if t <= 1.0 {
+        ((1.5 * t - 2.5) * t) * t + 1.0
+    } else if t < 2.0 {
+        ((-0.5 * t + 2.5) * t - 4.0) * t + 2.0
+    } else {
+        0.0
+    }
 }
 
 /// Size that fits within `max_side` on both axes, keeping the aspect ratio.
@@ -117,6 +189,47 @@ mod tests {
     fn image(width: u32, height: u32) -> RgbImage {
         let pixels = (0..width * height).flat_map(|i| [i as u8, (i * 2) as u8, (i * 3) as u8]).collect();
         RgbImage { width, height, pixels }
+    }
+
+    /// A white image with a dark block, standing in for a tight text selection: the
+    /// block must stay where it is through padding and upscaling, and the margins
+    /// must be uniform on all four sides. Sheared rows (a padded buffer shorter
+    /// than width × height) fail the right-margin check.
+    #[test]
+    fn padding_and_upscale_keep_the_content_in_place() {
+        let (w, h, block) = (60u32, 20u32, 8u32);
+        let mut pixels = vec![250u8; (w * h * 3) as usize];
+        for y in 6..6 + block {
+            for x in 20..20 + block {
+                pixels[((y * w + x) * 3) as usize..][..3].fill(25);
+            }
+        }
+        let crop = RgbImage { width: w, height: h, pixels };
+
+        let padded = crop.padded(4);
+        assert_eq!((padded.width, padded.height), (w + 8, h + 8));
+        let px = |img: &RgbImage, x: u32, y: u32| img.pixels[((y * img.width + x) * 3) as usize];
+        for y in 0..padded.height {
+            for x in 0..padded.width {
+                let on_margin = x < 4 || x >= padded.width - 4 || y < 4 || y >= padded.height - 4;
+                if on_margin {
+                    assert_eq!(px(&padded, x, y), 250, "margin at {x},{y}");
+                }
+            }
+        }
+        assert_eq!(px(&padded, 24, 10), 25, "the block moved with the pad");
+
+        let up = padded.resized(padded.width * 3, padded.height * 3);
+        for y in 0..up.height {
+            for x in 0..up.width {
+                let on_margin = x < 12 || x >= up.width - 12 || y < 12 || y >= up.height - 12;
+                if on_margin {
+                    assert_eq!(px(&up, x, y), 250, "upscaled margin at {x},{y}");
+                }
+            }
+        }
+        // The block's heart is still dark after 3x; cubic edges may ring, its center may not.
+        assert!(px(&up, 24 * 3 + block * 3 / 2, 10 * 3 + block * 3 / 2) < 60);
     }
 
     #[test]
@@ -164,5 +277,39 @@ mod tests {
         let gray = vec![0u8, 255, 0, 255];
         assert_eq!(resample(&gray, 2, 2, 1, 1, 1), vec![128]);
         assert_eq!(resample(&gray, 2, 2, 1, 4, 4).len(), 16);
+    }
+
+    #[test]
+    fn upscale_keeps_a_uniform_image_uniform() {
+        let flat = vec![90u8; 4 * 4];
+        assert!(resample(&flat, 4, 4, 1, 9, 9).iter().all(|&v| v == 90));
+    }
+
+    #[test]
+    fn pads_a_uniform_image_with_its_own_color() {
+        let image = RgbImage { width: 3, height: 2, pixels: vec![7; 18] };
+        let padded = image.padded(2);
+        assert_eq!((padded.width, padded.height), (7, 6));
+        // A short buffer would mean sheared rows: every row must be full width.
+        assert_eq!(padded.pixels.len(), 7 * 6 * 3);
+        assert!(padded.pixels.chunks_exact(3).all(|px| px == [7, 7, 7]));
+    }
+
+    #[test]
+    fn pad_color_is_the_average_of_the_border() {
+        // Top row of 8s over a row of 0s: the border holds four 8s and four 0s, so
+        // the margin color is 4 and the original pixels sit offset by the pad.
+        let mut pixels = vec![0u8; 2 * 2 * 3];
+        pixels[0..3].fill(8);
+        pixels[3..6].fill(8);
+        let image = RgbImage { width: 2, height: 2, pixels };
+        let padded = image.padded(1);
+        assert_eq!(padded.pixels.len(), 4 * 4 * 3);
+        assert_eq!(&padded.pixels[0..3], &[4, 4, 4]);
+        let top_left = (padded.width as usize + 1) * 3;
+        assert_eq!(&padded.pixels[top_left..top_left + 3], &[8, 8, 8]);
+        // The right pad of the same content row, and the bottom pad row.
+        assert_eq!(&padded.pixels[(padded.width as usize * 2 - 1) * 3..][0..3], &[4, 4, 4]);
+        assert_eq!(&padded.pixels[padded.width as usize * 3 * 3..][0..3], &[4, 4, 4]);
     }
 }

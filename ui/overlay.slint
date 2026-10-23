@@ -1,11 +1,11 @@
 // Full-screen capture overlay, one per monitor. It draws the frozen frame captured
 // before the window appeared; the crop is taken from that frame in Rust, so nothing
-// drawn here (dimming, guides, hint) can end up in the recognized image.
+// drawn here (dimming, hint) can end up in the recognized image.
 //
 // The software renderer repaints only what changed. The backdrop is a pre-dimmed copy
-// of the frame and the selection shows the original on top of it, so a mouse move
-// repaints the two guide lines and, while dragging, the selection rectangle; geometry
-// that depends on the pointer must not span the whole screen.
+// of the frame and the selection shows the original on top of it, so dragging
+// repaints only the selection rectangle; geometry that depends on the pointer must
+// not span the whole screen.
 
 import { Theme } from "theme.slint";
 import { Keycap } from "components.slint";
@@ -14,10 +14,6 @@ export component OverlayWindow inherits Window {
     in property <image> frame;
     // The same frame at half brightness (made in capture.rs).
     in property <image> dimmed;
-    // Cursor position when the overlay opened, in logical px; negative when the
-    // cursor is on another monitor. Used until the first mouse move arrives.
-    in property <length> start-x: -1px;
-    in property <length> start-y: -1px;
 
     callback cancel();
     callback selected(/* x */ length, /* y */ length, /* width */ length, /* height */ length);
@@ -30,16 +26,13 @@ export component OverlayWindow inherits Window {
     forward-focus: keys;
 
     property <bool> dragging: false;
-    property <bool> mouse-seen: false;
     property <length> anchor-x;
     property <length> anchor-y;
 
-    property <bool> pointer-here: ta.has-hover || root.dragging;
-    property <length> cx: root.pointer-here ? ta.mouse-x : root.start-x;
-    property <length> cy: root.pointer-here ? ta.mouse-y : root.start-y;
-    property <length> px: max(0px, min(root.cx, root.width - 1phx));
-    property <length> py: max(0px, min(root.cy, root.height - 1phx));
-    property <bool> show-guides: root.pointer-here || (!root.mouse-seen && root.start-x >= 0px);
+    // Pointer position clamped to the window; the TouchArea keeps tracking it
+    // through a drag, which is the only time anything on screen depends on it.
+    property <length> px: max(0px, min(ta.mouse-x, root.width - 1phx));
+    property <length> py: max(0px, min(ta.mouse-y, root.height - 1phx));
 
     property <length> sel-x: root.dragging ? min(root.anchor-x, root.px) : root.px;
     property <length> sel-y: root.dragging ? min(root.anchor-y, root.py) : root.py;
@@ -67,22 +60,6 @@ export component OverlayWindow inherits Window {
         source-clip-height: round(root.sel-h / 1phx);
         image-fit: fill;
         image-rendering: pixelated;
-    }
-
-    if root.show-guides: Rectangle {
-        x: root.px;
-        y: 0;
-        width: 1phx;
-        height: root.height;
-        background: Theme.crosshair;
-    }
-
-    if root.show-guides: Rectangle {
-        x: 0;
-        y: root.py;
-        width: root.width;
-        height: 1phx;
-        background: Theme.crosshair;
     }
 
     if root.dragging && root.sel-w > 0 && root.sel-h > 0: Rectangle {
@@ -158,15 +135,11 @@ export component OverlayWindow inherits Window {
 
     ta := TouchArea {
         mouse-cursor: crosshair;
-        changed has-hover => {
-            root.mouse-seen = true;
-        }
         pointer-event(event) => {
             if (event.button == PointerEventButton.right && event.kind == PointerEventKind.down) {
                 root.dragging = false;
                 root.cancel();
             } else if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
-                root.mouse-seen = true;
                 root.anchor-x = max(0px, min(self.mouse-x, root.width));
                 root.anchor-y = max(0px, min(self.mouse-y, root.height));
                 root.dragging = true;

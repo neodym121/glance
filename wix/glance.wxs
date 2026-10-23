@@ -2,7 +2,7 @@
 <!--
   Glance installer (WiX v5), built by .github/workflows/build.yml from the repository root:
 
-      wix build wix/glance.wxs -arch x64 -d Version=0.0.1 -d ExePath=target/release/glance.exe -o Glance.msi
+      wix build wix/glance.wxs -arch x64 -d Version=0.0.2 -d ExePath=target/release/glance.exe -o Glance.msi
 
   Version is the numeric part of the Cargo version: MSI versions have no pre-release tag.
   Per machine: glance.exe in Program Files\Glance and a Start menu shortcut.

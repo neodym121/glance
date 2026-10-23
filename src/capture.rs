@@ -96,7 +96,7 @@ impl Drop for GdiCapture {
 
 /// A monitor's image (3 bytes per pixel), and the same image at half brightness: the
 /// overlay draws the dimmed copy and shows the original only inside the selection, so
-/// moving the guides or the selection repaints just those spots instead of a full-screen
+/// moving the selection repaints just those spots instead of a full-screen
 /// scrim.
 pub struct Frame {
     pub pixels: SharedPixelBuffer<Rgb8Pixel>,

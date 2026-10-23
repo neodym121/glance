@@ -27,6 +27,11 @@ pub struct Selection {
     pub monitor: Monitor,
 }
 
+/// Margin added around the crop before recognition, in frame pixels. Selections are
+/// often drawn tight to the text; the padding, colored like the background at the
+/// crop's edge, keeps border glyphs from being cut off.
+const RECOGNITION_PAD: u32 = 16;
+
 impl Session {
     /// Captures every monitor first, then covers each with its frozen frame.
     pub fn open() -> Result<Self> {
@@ -46,10 +51,6 @@ impl Session {
             let b = monitor.bounds;
             window.window().set_position(PhysicalPosition::new(b.x, b.y));
             window.window().set_size(PhysicalSize::new(b.width as u32, b.height as u32));
-            if let Some((cx, cy)) = cursor.filter(|&(x, y)| b.contains(x, y)) {
-                window.set_start_x((cx - b.x) as f32 / monitor.scale);
-                window.set_start_y((cy - b.y) as f32 / monitor.scale);
-            }
             window.on_cancel(|| app::post(Action::OverlayCancel));
             window.on_selected(move |x, y, w, h| app::post(Action::OverlaySelected { screen: index, x, y, w, h }));
             window.window().on_close_requested(|| {
@@ -69,13 +70,13 @@ impl Session {
     }
 
     /// Cuts the selection out of the original frame (not the dimmed overlay), so the
-    /// scrim, guides and hint never reach recognition.
+    /// scrim and hint never reach recognition.
     pub fn selection(&self, screen: usize, x: f32, y: f32, w: f32, h: f32) -> Option<Selection> {
         let screen = self.screens.get(screen)?;
         let scale = screen.window.window().scale_factor();
         let (fw, fh) = (screen.frame.width(), screen.frame.height());
         let (px, py, pw, ph) = capture::logical_to_frame(x, y, w, h, scale, fw, fh)?;
-        let image = RgbImage::crop_from(screen.frame.as_bytes(), fw, px, py, pw, ph);
+        let image = RgbImage::crop_from(screen.frame.as_bytes(), fw, px, py, pw, ph).padded(RECOGNITION_PAD);
         let b = screen.monitor.bounds;
         Some(Selection {
             image,
