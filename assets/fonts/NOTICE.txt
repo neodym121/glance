@@ -1,0 +1,6 @@
+IBM Plex Sans (Regular, SemiBold)
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex".
+Licensed under the SIL Open Font License, Version 1.1: https://openfontlicense.org
+Source: https://github.com/IBM/plex
+
+Used as the substitute for Source Sans Pro listed in the design tokens.

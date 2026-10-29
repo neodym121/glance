@@ -1818,7 +1818,7 @@ checksum = "37bfe73dc8ec21f54d181e5a60554327ec3f1c600c455a75ccbfc65d2106a6c4"
 
 [[package]]
 name = "glance"
-version = "0.0.3-beta"
+version = "1.0.0"
 dependencies = [
  "embed-resource",
  "global-hotkey",

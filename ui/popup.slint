@@ -26,7 +26,7 @@ export component ResultPopup inherits Window {
     callback translate();
     callback open-link();
 
-    property <length> pad: 14px;
+    property <length> pad: 16px;
     property <length> max-body: 320px;
     property <length> body-height: root.state == PopupState.text ? min(body.preferred-height, root.max-body)
         : root.state == PopupState.error ? error-text.preferred-height
@@ -36,11 +36,12 @@ export component ResultPopup inherits Window {
     title: "Glance";
     no-frame: true;
     always-on-top: true;
-    background: Theme.iron;
+    background: Theme.canvas;
     width: root.popup-width;
     height: root.desired-height;
     default-font-family: Theme.font-family;
     default-font-size: Theme.text-body;
+    default-font-weight: Theme.weight-regular;
     forward-focus: keys;
 
     keys := FocusScope {
@@ -53,11 +54,16 @@ export component ResultPopup inherits Window {
         }
     }
 
-    // A faint rim keeps the edge visible on dark backgrounds (DWM adds the shadow).
+    // Midnight Panel fading to Deep Night from left to right, like the cards.
+    Rectangle {
+        background: @linear-gradient(90deg, Theme.panel 0%, Theme.canvas 100%);
+    }
+
+    // A hairline rim keeps the edge visible on dark backgrounds (DWM adds the shadow).
     Rectangle {
         border-width: 1px;
-        border-color: Theme.raised-rim;
-        border-radius: Theme.radius-sm; // matches the Windows 11 small corner rounding
+        border-color: Theme.line-strong;
+        border-radius: Theme.radius-md; // matches the Windows 11 corner rounding
     }
 
     if root.state == PopupState.recognizing: Text {
@@ -65,7 +71,7 @@ export component ResultPopup inherits Window {
         y: 12px;
         height: 20px;
         text: @tr("Recognizing text…");
-        color: Theme.silver;
+        color: Theme.text-muted;
         vertical-alignment: center;
         // Gentle pulse while waiting; the element only exists in this state.
         opacity: 0.6 + 0.4 * sin(animation-tick() / 1ms * 0.3deg);
@@ -76,7 +82,7 @@ export component ResultPopup inherits Window {
         y: 12px;
         height: 20px;
         text: @tr("No text found in the selected area.");
-        color: Theme.fog;
+        color: Theme.text-muted;
         vertical-alignment: center;
     }
 
@@ -93,7 +99,7 @@ export component ResultPopup inherits Window {
             padding-top: 2px;
             Icon {
                 source: @image-url("icons/circle-alert.svg");
-                tint: Theme.coral;
+                tint: Theme.danger;
             }
         }
 
@@ -104,9 +110,9 @@ export component ResultPopup inherits Window {
             read-only: true;
             single-line: false;
             wrap: word-wrap;
-            color: Theme.coral;
+            color: Theme.danger;
             selection-background-color: Theme.selection;
-            selection-foreground-color: Theme.chalk;
+            selection-foreground-color: Theme.text-strong;
         }
     }
 
@@ -127,11 +133,11 @@ export component ResultPopup inherits Window {
             read-only: true;
             single-line: false;
             wrap: word-wrap;
-            color: Theme.chalk;
+            color: Theme.text;
             font-size: Theme.text-body;
-            font-weight: Theme.weight-book;
+            font-weight: Theme.weight-regular;
             selection-background-color: Theme.selection;
-            selection-foreground-color: Theme.chalk;
+            selection-foreground-color: Theme.text-strong;
             key-pressed(event) => {
                 let action = EditKeys.action(event.text, event.modifiers.control, event.modifiers.shift);
                 if (action == "copy") {
@@ -152,14 +158,14 @@ export component ResultPopup inherits Window {
         height: max(24px, scroller.height * scroller.height / scroller.content-height);
         y: 12px + (-scroller.content-y) / (scroller.content-height - scroller.height) * (scroller.height - self.height);
         border-radius: 2px;
-        background: Theme.ring;
+        background: Theme.scrollbar;
     }
 
     // Footer
     Rectangle {
         y: root.height - 41px;
         height: 1px;
-        background: Theme.hairline;
+        background: Theme.line;
     }
 
     HorizontalLayout {
@@ -177,14 +183,14 @@ export component ResultPopup inherits Window {
                 alignment: center;
                 Icon {
                     source: @image-url("icons/check.svg");
-                    tint: Theme.mint;
+                    tint: Theme.success;
                 }
             }
 
             Text {
                 horizontal-stretch: 1;
                 text: root.status;
-                color: root.status-ok ? Theme.mint : Theme.fog;
+                color: root.status-ok ? Theme.success : Theme.text-muted;
                 font-size: Theme.text-caption;
                 vertical-alignment: center;
                 overflow: elide;

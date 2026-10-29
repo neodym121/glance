@@ -11,12 +11,91 @@ export global EditKeys {
 }
 
 export component Icon inherits Image {
-    in property <brush> tint: Theme.pale-steel;
+    in property <brush> tint: Theme.text-soft;
     width: 16px;
     height: 16px;
     colorize: tint;
 }
 
+// Fills the corner of its parent outside the circle the corner is rounded to. The software
+// renderer paints a gradient to the square box and ignores border-radius on it, so a
+// gradient is rounded by covering the four corners with the color behind it.
+component CornerMask inherits Rectangle {
+    in property <length> radius;
+    in property <color> mask-color;
+    // Which corner of the parent this sits in; the parent places it.
+    in property <bool> right;
+    in property <bool> bottom;
+
+    width: root.radius;
+    height: root.radius;
+    clip: true;
+
+    // A ring whose inner edge is the circle of the corner, centered in the corner square
+    // (or on its far corner), thick enough to reach the square's outer corner.
+    Rectangle {
+        x: (root.right ? 0px : root.radius) - 2 * root.radius;
+        y: (root.bottom ? 0px : root.radius) - 2 * root.radius;
+        width: 4 * root.radius;
+        height: 4 * root.radius;
+        border-radius: 2 * root.radius;
+        border-width: root.radius;
+        border-color: root.mask-color;
+    }
+}
+
+// A two-stop gradient with rounded corners. The gradient itself is the renderer's own, so
+// its steps fall in different places for each color channel and stay as fine as 8-bit
+// color allows; stacked bands of solid color, tried first, step all three channels at once
+// and show as stripes. The corners are masked with `backdrop`, which has to be the color
+// behind the element: the page color for a card, close enough for a control on a card's
+// right half, where the card has all but faded to it. Draw the edge as a separate
+// Rectangle over this.
+export component GradientFill inherits Rectangle {
+    // Colors at the start edge (top, or left when horizontal) and at the end edge.
+    in property <color> from;
+    in property <color> to;
+    in property <length> radius: Theme.radius-md;
+    in property <bool> horizontal: false;
+    in property <color> backdrop: Theme.canvas;
+
+    background: @linear-gradient(root.horizontal ? 90deg : 180deg, root.from 0%, root.to 100%);
+
+    CornerMask {
+        x: 0px;
+        y: 0px;
+        radius: root.radius;
+        mask-color: root.backdrop;
+    }
+
+    CornerMask {
+        x: parent.width - self.width;
+        y: 0px;
+        radius: root.radius;
+        mask-color: root.backdrop;
+        right: true;
+    }
+
+    CornerMask {
+        x: 0px;
+        y: parent.height - self.height;
+        radius: root.radius;
+        mask-color: root.backdrop;
+        bottom: true;
+    }
+
+    CornerMask {
+        x: parent.width - self.width;
+        y: parent.height - self.height;
+        radius: root.radius;
+        mask-color: root.backdrop;
+        right: true;
+        bottom: true;
+    }
+}
+
+// neutral: the raised-to-canvas gradient. ghost: outline only. ghost-muted: flat, for toolbars.
+// contrast: the Ink button, a black well on a dark surface.
 export enum ButtonKind { neutral, contrast, ghost, ghost-muted, danger }
 
 export component Button {
@@ -27,9 +106,12 @@ export component Button {
     in property <bool> enabled: true;
     callback clicked();
 
-    property <bool> flat: kind == ButtonKind.ghost || kind == ButtonKind.ghost-muted;
-    property <length> radius: small ? Theme.radius-sm : Theme.radius-md;
     property <bool> keyboard-focus: false;
+    property <bool> gradient: root.kind == ButtonKind.neutral || root.kind == ButtonKind.danger;
+    property <color> content-color: root.kind == ButtonKind.contrast ? Theme.text-strong
+        : root.kind == ButtonKind.danger ? Theme.danger
+        : root.kind == ButtonKind.ghost-muted ? (ta.has-hover || ta.pressed ? Theme.text : Theme.text-muted)
+        : Theme.text;
 
     min-height: small ? 24px : 28px;
     max-height: self.min-height;
@@ -65,24 +147,26 @@ export component Button {
         }
     }
 
+    // neutral and danger take the Hugging Face button gradient: raised at the top fading
+    // to canvas, lighter on hover. The other kinds get a plain hover wash.
+    if root.gradient: GradientFill {
+        from: root.enabled && ta.has-hover ? Theme.raised-hover : Theme.raised;
+        to: Theme.canvas;
+    }
+
+    if root.kind == ButtonKind.contrast: Rectangle {
+        border-radius: Theme.radius-md;
+        background: #000000;
+    }
+
     Rectangle {
-        border-radius: root.radius;
-        background: root.kind == ButtonKind.contrast ? Theme.lead : root.flat ? transparent : Theme.smoke-glass;
-        border-width: root.flat ? 0 : 1px;
-        border-color: root.kind == ButtonKind.contrast ? #ffffff4d : Theme.ring;
-
-        if root.kind == ButtonKind.contrast: Rectangle {
-            border-radius: root.radius;
-            background: @linear-gradient(180deg, #ffffff33 0%, #ffffff00 100%);
-        }
-
-        Rectangle {
-            border-radius: root.radius;
-            background: !root.enabled ? transparent
-                : ta.pressed ? (root.kind == ButtonKind.contrast ? #00000066 : Theme.pressed)
-                : ta.has-hover ? (root.kind == ButtonKind.contrast ? #0000003d : Theme.smoke-glass)
-                : transparent;
-        }
+        border-radius: Theme.radius-md;
+        background: !root.enabled ? transparent
+            : ta.pressed ? Theme.pressed
+            : ta.has-hover && !root.gradient ? Theme.hover
+            : transparent;
+        border-width: root.kind == ButtonKind.ghost-muted ? 0 : 1px;
+        border-color: root.kind == ButtonKind.ghost ? Theme.line-strong : Theme.line;
     }
 
     if fs.has-focus && root.keyboard-focus: Rectangle {
@@ -90,13 +174,13 @@ export component Button {
         y: -3px;
         width: root.width + 6px;
         height: root.height + 6px;
-        border-radius: root.radius + 3px;
+        border-radius: Theme.radius-md + 3px;
         border-width: 2px;
-        border-color: Theme.periwinkle;
+        border-color: Theme.link;
     }
 
     layout := HorizontalLayout {
-        padding-left: root.small ? 9px : 11px;
+        padding-left: root.small ? 10px : 12px;
         padding-right: self.padding-left;
         spacing: 6px;
         alignment: center;
@@ -105,7 +189,7 @@ export component Button {
             alignment: center;
             Icon {
                 source: root.icon;
-                tint: root.kind == ButtonKind.ghost-muted ? (ta.pressed ? Theme.pale-steel : Theme.fog) : Theme.pale-steel;
+                tint: root.content-color;
             }
         }
 
@@ -113,12 +197,8 @@ export component Button {
             text: root.text;
             vertical-alignment: center;
             font-size: Theme.text-body;
-            font-weight: Theme.weight-strong;
-            letter-spacing: -0.04px;
-            color: root.kind == ButtonKind.contrast ? Theme.flash-white
-                : root.kind == ButtonKind.ghost-muted ? Theme.silver
-                : root.kind == ButtonKind.danger ? Theme.coral
-                : Theme.chalk;
+            font-weight: Theme.weight-semibold;
+            color: root.content-color;
         }
     }
 
@@ -138,8 +218,8 @@ export component Switch {
 
     property <bool> keyboard-focus: false;
 
-    width: 24px;
-    height: 16px;
+    width: 32px;
+    height: 18px;
     opacity: enabled ? 1 : 0.5;
 
     accessible-role: switch;
@@ -176,30 +256,20 @@ export component Switch {
     }
 
     Rectangle {
-        border-radius: Theme.radius-sm;
-        background: root.checked ? Theme.cobalt : Theme.lead;
+        border-radius: Theme.radius-pill;
+        background: root.checked ? Theme.accent : Theme.raised;
         animate background { duration: 90ms; easing: ease-out; }
         border-width: 1px;
-        border-color: #ffffff1c;
+        border-color: root.checked ? Theme.accent : Theme.line-strong;
 
         Rectangle {
-            border-radius: Theme.radius-sm;
-            background: @linear-gradient(180deg, #ffffff00 0%, root.checked ? #ffffff1a : #ffffff33 100%);
-        }
-
-        Rectangle {
-            y: 2px;
-            width: ta.has-hover && root.enabled ? 13px : 12px;
+            y: 3px;
+            width: ta.has-hover && root.enabled ? 14px : 12px;
             height: 12px;
-            x: root.checked ? parent.width - self.width - 2px : 2px;
+            x: root.checked ? parent.width - self.width - 3px : 3px;
             animate x, width { duration: 90ms; easing: ease-out; }
-            border-radius: Theme.radius-xs;
-            background: root.checked ? #eeeeee : #f2f2f2;
-            border-width: 1px;
-            border-color: #ffffff;
-            drop-shadow-color: #00000066;
-            drop-shadow-offset-y: 0.5px;
-            drop-shadow-blur: 1px;
+            border-radius: self.height / 2;
+            background: root.checked ? Theme.text-strong : Theme.text-muted;
         }
     }
 
@@ -208,9 +278,9 @@ export component Switch {
         y: -3px;
         width: root.width + 6px;
         height: root.height + 6px;
-        border-radius: Theme.radius-sm + 3px;
+        border-radius: (root.height + 6px) / 2;
         border-width: 2px;
-        border-color: Theme.periwinkle;
+        border-color: Theme.link;
     }
 
     ta := TouchArea {
@@ -232,7 +302,7 @@ export component TextField {
     callback edited(string);
     callback accepted(string);
 
-    property <length> text-left: root.icon.width > 0 ? 32px : 9px;
+    property <length> text-left: root.icon.width > 0 ? 34px : 12px;
 
     height: 32px;
     min-width: 120px;
@@ -245,32 +315,27 @@ export component TextField {
 
     Rectangle {
         border-radius: Theme.radius-md;
-        background: Theme.carbon;
+        background: Theme.canvas;
         border-width: 1px;
-        border-color: input.has-focus ? Theme.periwinkle : Theme.ring;
-
-        Rectangle {
-            border-radius: Theme.radius-md;
-            background: @linear-gradient(180deg, #ffffff05 0%, #ffffff00 100%);
-        }
+        border-color: input.has-focus ? Theme.link : Theme.line-strong;
     }
 
     if root.icon.width > 0: Icon {
-        x: 10px;
+        x: 11px;
         source: root.icon;
-        tint: Theme.fog;
+        tint: Theme.text-faint;
     }
 
     Rectangle {
         x: root.text-left;
-        width: parent.width - root.text-left - 9px;
+        width: parent.width - root.text-left - 12px;
         clip: true;
 
         if root.text == "" && input.preedit-text == "": Text {
             width: 100%;
             height: 100%;
             text: root.placeholder;
-            color: Theme.fog;
+            color: Theme.text-faint;
             vertical-alignment: center;
             overflow: elide;
             font-size: Theme.text-body;
@@ -284,13 +349,13 @@ export component TextField {
             enabled: root.enabled;
             single-line: true;
             vertical-alignment: center;
-            color: Theme.chalk;
+            color: Theme.text;
             font-size: Theme.text-body;
-            font-weight: Theme.weight-book;
+            font-weight: Theme.weight-regular;
             font-family: root.mono ? Theme.mono-family : Theme.font-family;
             input-type: root.password ? InputType.password : InputType.text;
             selection-background-color: Theme.selection;
-            selection-foreground-color: Theme.chalk;
+            selection-foreground-color: Theme.text-strong;
             key-pressed(event) => {
                 let action = EditKeys.action(event.text, event.modifiers.control, event.modifiers.shift);
                 if (action == "paste") {
@@ -323,7 +388,7 @@ export component Select {
     in property <bool> enabled: true;
     callback selected(int);
 
-    property <length> row-height: 28px;
+    property <length> row-height: 30px;
 
     height: 32px;
     min-width: 160px;
@@ -333,27 +398,27 @@ export component Select {
     accessible-role: combobox;
     accessible-value: current-index >= 0 && current-index < model.length ? model[current-index] : "";
 
+    GradientFill {
+        from: root.enabled && ta.has-hover ? Theme.raised-hover : Theme.raised;
+        to: Theme.canvas;
+    }
+
     Rectangle {
         border-radius: Theme.radius-md;
-        background: Theme.smoke-glass;
+        background: ta.pressed ? Theme.pressed : transparent;
         border-width: 1px;
-        border-color: popup.is-open ? Theme.periwinkle : Theme.ring;
-
-        Rectangle {
-            border-radius: Theme.radius-md;
-            background: ta.pressed ? Theme.pressed : ta.has-hover ? Theme.smoke-glass : transparent;
-        }
+        border-color: popup.is-open ? Theme.link : Theme.line;
     }
 
     HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 8px;
+        padding-left: 12px;
+        padding-right: 10px;
         spacing: 6px;
 
         Text {
             horizontal-stretch: 1;
             text: root.current-index >= 0 && root.current-index < root.model.length ? root.model[root.current-index] : "";
-            color: Theme.chalk;
+            color: Theme.text;
             vertical-alignment: center;
             overflow: elide;
             font-size: Theme.text-body;
@@ -363,7 +428,7 @@ export component Select {
             alignment: center;
             Icon {
                 source: @image-url("icons/chevron-down.svg");
-                tint: Theme.fog;
+                tint: Theme.text-muted;
             }
         }
     }
@@ -379,24 +444,24 @@ export component Select {
         x: 0;
         y: root.height + 4px;
         width: root.width;
-        height: min(root.model.length * root.row-height + 10px, 8 * root.row-height + 10px);
+        height: min(root.model.length * root.row-height + 12px, 8 * root.row-height + 12px);
         close-policy: PopupClosePolicy.close-on-click-outside;
 
         Rectangle {
             border-radius: Theme.radius-md;
-            background: Theme.iron;
+            background: Theme.raised;
             border-width: 1px;
-            border-color: Theme.raised-rim;
-            drop-shadow-color: #00000066;
-            drop-shadow-offset-y: 8px;
-            drop-shadow-blur: 16px;
+            border-color: Theme.line-strong;
+            drop-shadow-color: #00000080;
+            drop-shadow-offset-y: 1px;
+            drop-shadow-blur: 3px;
             clip: true;
 
             list := Flickable {
-                x: 5px;
-                y: 5px;
-                width: parent.width - 10px;
-                height: parent.height - 10px;
+                x: 6px;
+                y: 6px;
+                width: parent.width - 12px;
+                height: parent.height - 12px;
                 mouse-drag-pan-enabled: false;
                 content-height: root.model.length * root.row-height;
                 init => {
@@ -409,7 +474,7 @@ export component Select {
                     height: root.row-height;
                     width: list.width;
                     border-radius: Theme.radius-sm;
-                    background: item-ta.has-hover ? Theme.smoke-glass : transparent;
+                    background: item-ta.has-hover ? Theme.hover : transparent;
 
                     HorizontalLayout {
                         padding-left: 8px;
@@ -419,7 +484,8 @@ export component Select {
                         Text {
                             horizontal-stretch: 1;
                             text: label;
-                            color: i == root.current-index ? Theme.chalk : Theme.silver;
+                            color: i == root.current-index ? Theme.text : Theme.text-soft;
+                            font-weight: i == root.current-index ? Theme.weight-semibold : Theme.weight-regular;
                             vertical-alignment: center;
                             overflow: elide;
                             font-size: Theme.text-body;
@@ -429,7 +495,7 @@ export component Select {
                             alignment: center;
                             Icon {
                                 source: @image-url("icons/check.svg");
-                                tint: Theme.pale-steel;
+                                tint: Theme.link;
                             }
                         }
                     }
@@ -446,12 +512,12 @@ export component Select {
 
             // Thin scrollbar thumb, shown only when the list overflows.
             if list.content-height > list.height: Rectangle {
-                x: parent.width - 6px;
+                x: parent.width - 7px;
                 width: 3px;
                 height: max(24px, list.height * list.height / list.content-height);
-                y: 5px + (-list.content-y) / (list.content-height - list.height) * (list.height - self.height);
+                y: 6px + (-list.content-y) / (list.content-height - list.height) * (list.height - self.height);
                 border-radius: 2px;
-                background: Theme.ring;
+                background: Theme.scrollbar;
             }
         }
     }
@@ -483,7 +549,7 @@ export component ListView {
         height: max(24px, flickable.height * flickable.height / flickable.content-height);
         y: (-flickable.content-y) / (flickable.content-height - flickable.height) * (flickable.height - self.height);
         border-radius: 2px;
-        background: Theme.ring;
+        background: Theme.scrollbar;
     }
 }
 
@@ -495,27 +561,25 @@ export component Segmented {
     in property <bool> stretch: false;
     callback selected(int);
 
-    height: 28px;
+    height: 32px;
     accessible-role: tab-list;
 
     Rectangle {
         border-radius: Theme.radius-md;
-        background: Theme.iron;
+        background: Theme.canvas;
         border-width: 1px;
-        border-color: Theme.hairline;
+        border-color: Theme.line;
     }
 
     HorizontalLayout {
-        padding: 2px;
+        padding: 3px;
         spacing: 2px;
 
         for label[i] in root.model: Rectangle {
             horizontal-stretch: root.stretch ? 1 : 0;
             preferred-width: root.stretch ? 1px : seg-layout.preferred-width;
             border-radius: Theme.radius-sm;
-            background: i == root.current-index ? Theme.carbon : seg-ta.has-hover ? Theme.smoke-glass : transparent;
-            border-width: i == root.current-index ? 1px : 0px;
-            border-color: Theme.ring;
+            background: i == root.current-index ? Theme.raised : seg-ta.has-hover ? Theme.hover : transparent;
             animate background { duration: 120ms; }
             accessible-role: tab;
             accessible-label: label;
@@ -526,10 +590,11 @@ export component Segmented {
 
                 Text {
                     text: label;
-                    color: i == root.current-index ? Theme.chalk : Theme.silver;
+                    color: i == root.current-index ? Theme.text : Theme.text-muted;
                     vertical-alignment: center;
                     horizontal-alignment: center;
                     font-size: Theme.text-body;
+                    font-weight: i == root.current-index ? Theme.weight-semibold : Theme.weight-regular;
                 }
             }
 
@@ -545,24 +610,21 @@ export component Segmented {
 
 export component Tag inherits Rectangle {
     in property <string> text;
-    in property <color> text-color: Theme.silver;
+    in property <color> text-color: Theme.text-soft;
 
-    height: 16px;
-    border-radius: Theme.radius-xs;
-    background: Theme.pewter;
-    border-width: 1px;
-    border-color: Theme.veil;
+    height: 20px;
+    border-radius: Theme.radius-sm;
+    background: Theme.raised;
 
     HorizontalLayout {
-        padding-left: 4px;
-        padding-right: 4px;
+        padding-left: 8px;
+        padding-right: 8px;
 
         Text {
             text: root.text;
             color: root.text-color;
-            font-size: Theme.text-label;
-            font-weight: Theme.weight-strong;
-            letter-spacing: 0.05px;
+            font-size: Theme.text-caption;
+            font-weight: Theme.weight-semibold;
             vertical-alignment: center;
         }
     }
@@ -571,32 +633,40 @@ export component Tag inherits Rectangle {
 export component Keycap inherits Rectangle {
     in property <string> text;
 
-    height: 18px;
+    height: 20px;
     border-radius: Theme.radius-sm;
-    background: Theme.pewter;
+    background: Theme.raised;
     border-width: 1px;
-    border-color: Theme.ring;
+    border-color: Theme.line-strong;
 
     HorizontalLayout {
-        padding-left: 5px;
-        padding-right: 5px;
+        padding-left: 6px;
+        padding-right: 6px;
 
         Text {
             text: root.text;
-            color: Theme.chalk;
-            font-size: Theme.text-label;
-            font-weight: Theme.weight-strong;
+            color: Theme.text;
+            font-size: Theme.text-caption;
+            font-weight: Theme.weight-semibold;
             vertical-alignment: center;
         }
     }
 }
 
-// Settings card: Iron on the Carbon page, like the OpenCode console cards.
+// Settings card: Midnight Panel fading to Deep Night from left to right, a hairline edge,
+// no shadow.
 export component Card inherits Rectangle {
-    background: Theme.iron;
-    border-radius: Theme.radius-md;
-    border-width: 1px;
-    border-color: Theme.hairline;
+    GradientFill {
+        from: Theme.panel;
+        to: Theme.canvas;
+        horizontal: true;
+    }
+
+    Rectangle {
+        border-radius: Theme.radius-md;
+        border-width: 1px;
+        border-color: Theme.line;
+    }
 
     VerticalLayout {
         padding-left: 16px;
@@ -609,21 +679,20 @@ export component Card inherits Rectangle {
 
 export component Divider inherits Rectangle {
     height: 1px;
-    background: Theme.veil;
+    background: Theme.line;
 }
 
 export component SectionTitle inherits Text {
-    color: Theme.chalk;
-    font-size: Theme.text-body;
-    font-weight: Theme.weight-strong;
-    letter-spacing: -0.13px;
+    color: Theme.text;
+    font-size: Theme.text-title;
+    font-weight: Theme.weight-semibold;
 }
 
 // Title and description on the left, the control on the right.
 export component SettingsRow {
     in property <string> title;
     in property <string> description;
-    in property <color> description-color: Theme.silver;
+    in property <color> description-color: Theme.text-muted;
 
     HorizontalLayout {
         padding-top: 14px;
@@ -637,15 +706,15 @@ export component SettingsRow {
 
             Text {
                 text: root.title;
-                color: Theme.chalk;
+                color: Theme.text;
                 font-size: Theme.text-body;
-                font-weight: Theme.weight-strong;
+                font-weight: Theme.weight-semibold;
             }
 
             if root.description != "": Text {
                 text: root.description;
                 color: root.description-color;
-                font-size: Theme.text-body;
+                font-size: Theme.text-small;
                 wrap: word-wrap;
             }
         }
@@ -664,34 +733,34 @@ export component NavItem {
     in property <bool> active;
     callback clicked();
 
-    height: 28px;
+    height: 32px;
     accessible-role: tab;
     accessible-label: text;
 
     Rectangle {
-        border-radius: Theme.radius-md;
-        background: root.active ? Theme.pewter : ta.has-hover ? Theme.smoke-glass : transparent;
+        border-radius: Theme.radius-sm;
+        background: root.active ? Theme.raised : ta.has-hover ? Theme.hover : transparent;
     }
 
     HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 8px;
-        spacing: 8px;
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 10px;
 
         VerticalLayout {
             alignment: center;
             Icon {
                 source: root.icon;
-                tint: root.active ? Theme.chalk : Theme.silver;
+                tint: root.active ? Theme.link : ta.has-hover ? Theme.text : Theme.text-muted;
             }
         }
 
         Text {
             text: root.text;
-            color: root.active ? Theme.chalk : Theme.silver;
+            color: root.active ? Theme.link : ta.has-hover ? Theme.text : Theme.text-muted;
             vertical-alignment: center;
             font-size: Theme.text-body;
-            font-weight: root.active ? Theme.weight-strong : Theme.weight-book;
+            font-weight: root.active ? Theme.weight-semibold : Theme.weight-regular;
         }
     }
 

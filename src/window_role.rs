@@ -50,7 +50,7 @@ pub fn attributes_hook(attributes: WindowAttributes) -> WindowAttributes {
             // the popup itself instead of the accent-colored system border.
             .with_undecorated_shadow(true)
             .with_border_color(None)
-            .with_corner_preference(CornerPreference::RoundSmall),
+            .with_corner_preference(CornerPreference::Round),
         Role::Settings => {
             // The window draws its own title bar; keep the native shadow, snap and corners.
             attributes
@@ -59,7 +59,8 @@ pub fn attributes_hook(attributes: WindowAttributes) -> WindowAttributes {
                 .with_undecorated_shadow(true)
                 .with_theme(Some(Theme::Dark))
                 .with_corner_preference(CornerPreference::Round)
-                .with_border_color(Some(Color::from_rgb(0x24, 0x24, 0x24)))
+                // Theme.line (ui/theme.slint)
+                .with_border_color(Some(Color::from_rgb(0x14, 0x1c, 0x2e)))
                 .with_window_icon(Icon::from_resource(APP_ICON, None).ok())
                 .with_taskbar_icon(Icon::from_resource(APP_ICON, None).ok())
         }

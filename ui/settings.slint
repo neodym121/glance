@@ -64,28 +64,28 @@ component HotkeyField {
 
     Rectangle {
         border-radius: Theme.radius-md;
-        background: Theme.carbon;
+        background: Theme.canvas;
         border-width: 1px;
-        border-color: root.recording ? Theme.periwinkle : Theme.ring;
+        border-color: root.recording ? Theme.link : Theme.line-strong;
     }
 
     HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 10px;
+        padding-left: 12px;
+        padding-right: 12px;
         spacing: 8px;
 
         VerticalLayout {
             alignment: center;
             Icon {
                 source: @image-url("icons/keyboard.svg");
-                tint: Theme.fog;
+                tint: Theme.text-faint;
             }
         }
 
         Text {
             horizontal-stretch: 1;
             text: !root.recording ? root.value : root.pending != "" ? root.pending : @tr("Press a shortcut…");
-            color: root.recording ? Theme.silver : Theme.chalk;
+            color: root.recording ? Theme.text-muted : Theme.text;
             vertical-alignment: center;
             overflow: elide;
         }
@@ -157,7 +157,7 @@ component KeyCard inherits Card {
     SettingsRow {
         title: root.provider;
         description: root.value != "" ? @tr("All set!") : @tr("Not configured");
-        description-color: root.value != "" ? Theme.mint : Theme.coral;
+        description-color: root.value != "" ? Theme.success : Theme.danger;
 
         TextField {
             width: 240px;
@@ -222,13 +222,14 @@ component ModelCard inherits Card {
 
                 Text {
                     text: @tr("Model");
-                    color: Theme.chalk;
-                    font-weight: Theme.weight-strong;
+                    color: Theme.text;
+                    font-weight: Theme.weight-semibold;
                 }
 
                 Text {
                     text: @tr("Selected: {}", ModelList.selected);
-                    color: Theme.silver;
+                    color: Theme.text-muted;
+                    font-size: Theme.text-small;
                     overflow: elide;
                 }
             }
@@ -258,16 +259,16 @@ component ModelCard inherits Card {
         // A failed refresh keeps the previous list; say so above it.
         if ModelList.items.length > 0 && ModelList.status-is-error: Text {
             text: ModelList.status;
-            color: Theme.coral;
+            color: Theme.danger;
             wrap: word-wrap;
         }
 
         Rectangle {
             height: ModelList.items.length == 0 ? 64px : min(ModelList.items.length, root.max-rows) * root.row-height + 8px;
             border-radius: Theme.radius-md;
-            background: Theme.carbon;
+            background: Theme.canvas;
             border-width: 1px;
-            border-color: Theme.hairline;
+            border-color: Theme.line;
             clip: true;
 
             if ModelList.items.length == 0: HorizontalLayout {
@@ -277,7 +278,7 @@ component ModelCard inherits Card {
 
                 Text {
                     text: ModelList.status;
-                    color: ModelList.status-is-error ? Theme.coral : Theme.silver;
+                    color: ModelList.status-is-error ? Theme.danger : Theme.text-muted;
                     vertical-alignment: center;
                     horizontal-alignment: center;
                     wrap: word-wrap;
@@ -303,7 +304,7 @@ component ModelCard inherits Card {
 
                     height: root.row-height;
                     border-radius: Theme.radius-sm;
-                    background: self.chosen ? Theme.pewter : row-ta.has-hover ? Theme.smoke-glass : transparent;
+                    background: self.chosen ? Theme.raised : row-ta.has-hover ? Theme.hover : transparent;
                     accessible-role: list-item;
                     accessible-label: item.custom ? item.id : item.name;
 
@@ -315,8 +316,8 @@ component ModelCard inherits Card {
                         Text {
                             horizontal-stretch: row.show-id ? 0 : 1;
                             text: item.custom ? @tr("Use this model ID") : item.name;
-                            color: row.chosen ? Theme.chalk : item.custom ? Theme.silver : Theme.pale-steel;
-                            font-weight: row.chosen ? Theme.weight-strong : Theme.weight-book;
+                            color: row.chosen ? Theme.text : item.custom ? Theme.text-muted : Theme.text-soft;
+                            font-weight: row.chosen ? Theme.weight-semibold : Theme.weight-regular;
                             vertical-alignment: center;
                             overflow: elide;
                         }
@@ -324,9 +325,9 @@ component ModelCard inherits Card {
                         if row.show-id: Text {
                             horizontal-stretch: 1;
                             text: item.id;
-                            color: Theme.fog;
+                            color: Theme.text-faint;
                             font-family: Theme.mono-family;
-                            font-size: Theme.text-caption;
+                            font-size: Theme.text-small;
                             vertical-alignment: center;
                             overflow: elide;
                         }
@@ -335,7 +336,7 @@ component ModelCard inherits Card {
                             alignment: center;
                             Icon {
                                 source: @image-url("icons/check.svg");
-                                tint: Theme.pale-steel;
+                                tint: Theme.link;
                             }
                         }
                     }
@@ -367,14 +368,14 @@ component CaptionButton {
 
     Rectangle {
         border-radius: Theme.radius-md;
-        background: ta.pressed ? (root.danger ? #f1747140 : Theme.pressed)
-            : ta.has-hover ? (root.danger ? #f1747126 : Theme.smoke-glass)
+        background: ta.pressed ? (root.danger ? Theme.danger-pressed : Theme.pressed)
+            : ta.has-hover ? (root.danger ? Theme.danger-hover : Theme.hover)
             : transparent;
     }
 
     Icon {
         source: root.icon;
-        tint: ta.has-hover ? (root.danger ? Theme.coral : Theme.chalk) : Theme.silver;
+        tint: ta.has-hover ? (root.danger ? Theme.danger : Theme.text) : Theme.text-muted;
     }
 
     ta := TouchArea {
@@ -395,14 +396,15 @@ component Note inherits HorizontalLayout {
         padding-top: 2px;
         Icon {
             source: @image-url("icons/info.svg");
-            tint: Theme.fog;
+            tint: Theme.text-muted;
         }
     }
 
     Text {
         horizontal-stretch: 1;
         text: root.text;
-        color: Theme.silver;
+        color: Theme.text-muted;
+        font-size: Theme.text-small;
         wrap: word-wrap;
     }
 }
@@ -416,15 +418,14 @@ component PageHeader inherits VerticalLayout {
 
     Text {
         text: root.title;
-        color: Theme.chalk;
+        color: Theme.text-strong;
         font-size: Theme.text-heading;
-        font-weight: Theme.weight-strong;
-        letter-spacing: -0.13px;
+        font-weight: Theme.weight-semibold;
     }
 
     Text {
         text: root.description;
-        color: Theme.silver;
+        color: Theme.text-muted;
         wrap: word-wrap;
     }
 }
@@ -517,15 +518,15 @@ export component SettingsWindow inherits Window {
     min-height: 560px;
     max-width: 1200px;
     max-height: 900px;
-    background: Theme.carbon;
+    background: Theme.canvas;
     default-font-family: Theme.font-family;
     default-font-size: Theme.text-body;
-    default-font-weight: Theme.weight-book;
+    default-font-weight: Theme.weight-regular;
 
     VerticalLayout {
         // Title bar drawn by the app (the window has no system frame).
         Rectangle {
-            height: 40px;
+            height: 44px;
 
             WindowMoveArea {
                 x: 0;
@@ -537,21 +538,23 @@ export component SettingsWindow inherits Window {
             HorizontalLayout {
                 padding-left: 16px;
                 padding-right: 8px;
-                spacing: 8px;
+                spacing: 10px;
 
+                // The logo mark is the one place the brand yellow appears.
                 VerticalLayout {
                     alignment: center;
                     Icon {
                         source: @image-url("icons/scan-text.svg");
-                        tint: Theme.pale-steel;
+                        tint: Theme.brand;
                     }
                 }
 
                 Text {
                     horizontal-stretch: 1;
                     text: @tr("Glance Settings");
-                    color: Theme.silver;
-                    font-size: Theme.text-caption;
+                    color: Theme.text;
+                    font-size: Theme.text-body;
+                    font-weight: Theme.weight-semibold;
                     vertical-alignment: center;
                 }
 
@@ -583,16 +586,18 @@ export component SettingsWindow inherits Window {
             Rectangle {
                 y: parent.height - 1px;
                 height: 1px;
-                background: Theme.hairline;
+                background: Theme.line;
             }
         }
 
         HorizontalLayout {
             vertical-stretch: 1;
 
-            // Sidebar. Its empty space moves the window, like the title bar.
+            // Sidebar. Its empty space moves the window, like the title bar. It fades
+            // from Midnight Panel at the content edge to Deep Night, as on Hugging Face.
             Rectangle {
                 width: 216px;
+                background: @linear-gradient(270deg, Theme.panel 0%, Theme.canvas 100%);
 
                 WindowMoveArea {
                     width: parent.width;
@@ -655,7 +660,7 @@ export component SettingsWindow inherits Window {
 
             Rectangle {
                 width: 1px;
-                background: Theme.hairline;
+                background: Theme.line;
             }
 
             VerticalLayout {
@@ -785,7 +790,7 @@ export component SettingsWindow inherits Window {
                                             : root.paddle-ready
                                             ? @tr("Downloaded. Recognition runs entirely on this PC.")
                                             : @tr("Not downloaded yet.");
-                                        description-color: root.paddle-error != "" ? Theme.coral : Theme.silver;
+                                        description-color: root.paddle-error != "" ? Theme.danger : Theme.text-muted;
 
                                         if root.paddle-downloading: HorizontalLayout {
                                             spacing: 10px;
@@ -794,20 +799,20 @@ export component SettingsWindow inherits Window {
                                                 width: 120px;
                                                 height: 6px;
                                                 border-radius: 3px;
-                                                background: Theme.veil;
+                                                background: Theme.raised;
 
                                                 Rectangle {
                                                     x: 0;
                                                     width: parent.width * min(1.0, root.paddle-progress);
                                                     height: parent.height;
                                                     border-radius: 3px;
-                                                    background: Theme.periwinkle;
+                                                    background: Theme.link;
                                                 }
                                             }
 
                                             Text {
                                                 text: @tr("Downloading…");
-                                                color: Theme.silver;
+                                                color: Theme.text-muted;
                                                 vertical-alignment: center;
                                             }
                                         }
@@ -1001,9 +1006,64 @@ export component SettingsWindow inherits Window {
                         if root.page == 4: VerticalLayout {
                             spacing: 24px;
 
-                            PageHeader {
-                                title: "Glance";
-                                description: @tr("Screen text recognition and translation from the system tray.");
+                            // The one loud block on the page: the Deep Night gradient with the brand stamp.
+                            Rectangle {
+                                property <length> pad: 28px;
+
+                                height: self.pad * 2 + 40px + 12px + hero-title.preferred-height + 12px + hero-text.preferred-height;
+                                border-radius: Theme.radius-lg;
+                                clip: true;
+
+                                // The software renderer fills a gradient to the square box and does not
+                                // clip to rounded corners, so a ring in the page color (12px thick,
+                                // 12px inner radius) is laid over the fill to round it off.
+                                Rectangle {
+                                    background: Theme.deep-night;
+                                }
+
+                                Rectangle {
+                                    x: -12px;
+                                    y: -12px;
+                                    width: parent.width + 24px;
+                                    height: parent.height + 24px;
+                                    border-radius: 24px;
+                                    border-width: 12px;
+                                    border-color: Theme.canvas;
+                                }
+
+                                Rectangle {
+                                    border-radius: Theme.radius-lg;
+                                    border-width: 1px;
+                                    border-color: Theme.line;
+                                }
+
+                                Icon {
+                                    x: parent.pad;
+                                    y: parent.pad;
+                                    width: 40px;
+                                    height: 40px;
+                                    source: @image-url("icons/scan-text.svg");
+                                    tint: Theme.brand;
+                                }
+
+                                hero-title := Text {
+                                    x: parent.pad;
+                                    y: parent.pad + 52px;
+                                    text: "Glance";
+                                    color: Theme.text-strong;
+                                    font-size: Theme.text-display;
+                                    font-weight: Theme.weight-semibold;
+                                }
+
+                                hero-text := Text {
+                                    x: parent.pad;
+                                    y: hero-title.y + hero-title.height + 12px;
+                                    width: parent.width - 2 * parent.pad;
+                                    text: @tr("Screen text recognition and translation from the system tray.");
+                                    color: Theme.text-muted;
+                                    font-size: Theme.text-title;
+                                    wrap: word-wrap;
+                                }
                             }
 
                             Card {
@@ -1032,13 +1092,13 @@ export component SettingsWindow inherits Window {
                                             source: @image-url("images/slint-logo-gray.png");
                                             height: 19px;
                                             width: self.height * 512 / 153;
-                                            colorize: Theme.silver;
+                                            colorize: Theme.text-muted;
                                         }
                                     }
 
                                     Text {
                                         text: @tr("works on your machine");
-                                        color: Theme.silver;
+                                        color: Theme.text-muted;
                                         vertical-alignment: center;
                                     }
                                 }
@@ -1050,19 +1110,19 @@ export component SettingsWindow inherits Window {
                 // Changes are saved as they are made; problems show here.
                 if root.error-text != "": Rectangle {
                     height: 40px;
-                    background: Theme.iron;
+                    background: Theme.panel;
 
                     Rectangle {
                         y: 0;
                         height: 1px;
-                        background: Theme.hairline;
+                        background: Theme.line;
                     }
 
                     Text {
                         x: 16px;
                         width: parent.width - 32px;
                         text: root.error-text;
-                        color: Theme.coral;
+                        color: Theme.danger;
                         vertical-alignment: center;
                         overflow: elide;
                     }

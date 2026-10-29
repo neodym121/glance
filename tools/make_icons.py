@@ -5,7 +5,7 @@ Standard library only. Run from the repository root:
     python tools/make_icons.py
 
 Writes:
-    assets/glance.ico      app icon: light glyph on a graphite tile
+    assets/glance.ico      app icon: Hugging Yellow glyph on a Deep Night tile
     assets/tray-dark.ico   tray icon for a dark taskbar (white glyph)
     assets/tray-light.ico  tray icon for a light taskbar (dark glyph)
     assets/glance.png      256px app icon for the README
@@ -76,7 +76,7 @@ def render(size, kind):
         inset = size * 0.0
         tile_r = size * 0.22
         glyph_box = (size * 0.18, size * 0.18, size * 0.82, size * 0.82)
-        glyph_rgb = (250, 250, 250)
+        glyph_rgb = (255, 210, 16)  # Hugging Yellow, the brand stamp
     else:
         glyph_box = (0, 0, size, size)
         glyph_rgb = (255, 255, 255) if kind == "tray-dark" else (26, 26, 26)
@@ -93,10 +93,11 @@ def render(size, kind):
                 sd = rounded_rect_sd(px, py, inset, inset, size - inset, size - inset, tile_r)
                 tile_a = max(0.0, min(1.0, 0.5 - sd))
                 if tile_a > 0:
-                    # Iron tile with a faint top light and a half-pixel white rim.
-                    shade = 36 + 10 * (1 - py / size)
-                    color, alpha = (shade, shade, shade), tile_a
-                    rim = max(0.0, 1.0 - abs(sd + 0.5)) * 0.18
+                    # Deep Night gradient (#2c3344 to #0b0f19, top left to bottom right)
+                    # with a half-pixel white rim.
+                    color = blend((0x2C, 0x33, 0x44), (0x0B, 0x0F, 0x19), (px + py) / (2 * size))
+                    alpha = tile_a
+                    rim = max(0.0, 1.0 - abs(sd + 0.5)) * 0.14
                     color = blend(color, (255, 255, 255), rim)
             g = (px - gx0) / scale, (py - gy0) / scale
             sd_glyph = glyph_coverage(g[0], g[1], stroke / 2) * scale

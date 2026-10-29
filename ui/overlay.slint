@@ -23,6 +23,7 @@ export component OverlayWindow inherits Window {
     always-on-top: true;
     background: black;
     default-font-family: Theme.font-family;
+    default-font-weight: Theme.weight-regular;
     forward-focus: keys;
 
     property <bool> dragging: false;
@@ -78,15 +79,15 @@ export component OverlayWindow inherits Window {
         width: size-text.preferred-width + 12px;
         height: 18px;
         border-radius: Theme.radius-sm;
-        background: #161616e6;
+        background: Theme.chip;
         border-width: 1px;
-        border-color: Theme.hairline;
+        border-color: Theme.line-strong;
 
         size-text := Text {
             text: round(root.sel-w / 1phx) + " × " + round(root.sel-h / 1phx);
-            color: Theme.silver;
-            font-size: Theme.text-label;
-            font-weight: Theme.weight-strong;
+            color: Theme.text;
+            font-size: Theme.text-caption;
+            font-weight: Theme.weight-semibold;
             vertical-alignment: center;
             horizontal-alignment: center;
         }
@@ -96,11 +97,11 @@ export component OverlayWindow inherits Window {
         x: (root.width - self.width) / 2;
         y: root.height - self.height - 72px;
         width: hint.preferred-width;
-        height: 32px;
+        height: 36px;
         border-radius: Theme.radius-md;
-        background: #161616eb;
+        background: Theme.chip;
         border-width: 1px;
-        border-color: Theme.raised-rim;
+        border-color: Theme.line-strong;
 
         hint := HorizontalLayout {
             padding-left: 10px;
@@ -116,7 +117,7 @@ export component OverlayWindow inherits Window {
 
             Text {
                 text: @tr("to cancel");
-                color: Theme.silver;
+                color: Theme.text-soft;
                 font-size: Theme.text-body;
                 vertical-alignment: center;
             }

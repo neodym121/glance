@@ -130,7 +130,7 @@ fn main() {
         settings.set_translation_provider(if page == 2 { 0 } else { 6 });
         settings.set_target_languages(strings(&["English", "German", "Russian"]));
         settings.set_target_language_index(2);
-        settings.set_version("0.0.3-beta".into());
+        settings.set_version("1.0.0".into());
         let list = settings.global::<ModelList>();
         let (items, query): (Vec<ModelItem>, &str) = if page == 2 {
             (vec![ModelItem { id: "my-org/custom-model".into(), name: "my-org/custom-model".into(), custom: true }], "my-org/custom-model")

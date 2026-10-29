@@ -1,53 +1,76 @@
-// Design tokens from media/DESIGN.md (graphite console).
-// Half-pixel rims from the CSS source are drawn as 1px lines at about half the alpha.
+// Design tokens from media/DESIGN.md (Hugging Face, a light source), laid out as a dark UI.
+// The source is a light theme, so its neutral ramp is flipped: Deep Night is the canvas,
+// Midnight Panel the card, and the two Tailwind gray steps the source tokens come from
+// (gray-800, gray-700) give the soft surface and the borders. Emphasis runs the other
+// way too: white is the strongest text, Steel Caption the quietest.
+
+import "../assets/fonts/IBMPlexSans-Regular.ttf";
+import "../assets/fonts/IBMPlexSans-SemiBold.ttf";
 
 export global Theme {
-    // Surfaces
-    out property <color> carbon: #161616;
-    out property <color> iron: #242424;
-    out property <color> pewter: #2e2e2e;
-    out property <color> lead: #5c5c5c;
+    // Surfaces. The Hugging Face dark theme never uses a flat fill on a card or a button:
+    // cards run panel to canvas from left to right, the sidebar the same from right to left,
+    // and buttons raised to canvas from top to bottom (see GradientFill in components.slint).
+    out property <color> canvas: #0b0f19;       // Deep Night: window background, end of every gradient
+    out property <color> panel: #101828;        // Midnight Panel: start of the card and sidebar gradients
+    out property <color> raised: #1e2939;       // soft surface: start of the button gradient, tags, menus
+    out property <color> raised-hover: #364153; // start of the button gradient on hover
 
-    // Text and icons
-    out property <color> chalk: #fafafa;
-    out property <color> pale-steel: #dbdbdb;
-    out property <color> silver: #aeaeae;
-    out property <color> fog: #808080;
-    out property <color> flash-white: #ffffff;
+    // Lines
+    out property <color> line: #141c2e;        // Mist Border: card edge, dividers, button edge
+    out property <color> line-strong: #1e2939; // Fog Border: field and keycap edge
 
-    // Translucent white overlays and lines
-    out property <color> smoke-glass: #ffffff0f; // 6%: control fill, hover overlay
-    out property <color> pressed: #ffffff1a;     // 10%: pressed overlay
-    out property <color> hairline: #ffffff14;    // 8%: dividers, card borders
-    out property <color> veil: #ffffff1a;        // 10%: tags, small plates
-    out property <color> ring: #ffffff24;        // button and input ring (0.5px at 20%)
-    out property <color> raised-rim: #ffffff1c;  // card and popup rim (0.5px at 16%)
+    // Text and icons, strongest first
+    out property <color> text-strong: #ffffff; // Paper White
+    out property <color> text: #f3f4f6;        // Cloud Gray
+    out property <color> text-soft: #d1d5dc;
+    out property <color> text-muted: #99a1af;  // Ash Disabled: descriptions, captions
+    out property <color> text-faint: #6a7282;  // Steel Caption: placeholders, hints
 
-    // Functional colors
-    out property <color> cobalt: #3b5cf6;      // switch on
-    out property <color> periwinkle: #7698fd;  // focus
-    out property <color> mint: #6bd586;        // success text and dots
-    out property <color> coral: #f17471;       // danger text
-    out property <color> selection: #7698fd59; // text selection
+    // White overlays for hover and pressed, so they work on any surface
+    out property <color> hover: #ffffff0f;   // 6%
+    out property <color> pressed: #ffffff1a; // 10%
+    out property <color> scrollbar: #99a1af66;
+
+    // Accent. Link Blue (#155dfc) fills the switch and text selection; on a dark surface
+    // it is only 2.9:1, so text, focus rings and the progress bar use the lighter step
+    // of the same hue (Tailwind blue-400).
+    out property <color> accent: #155dfc;
+    out property <color> link: #51a2ff;
+    out property <color> selection: #155dfc99;
+
+    // Brand stamp: Hugging Yellow lives in the logo mark only, never in fills or text.
+    out property <color> brand: #ffd210;
+
+    // The design has no status colors; these are Tailwind red-400 and green-400.
+    out property <color> success: #05df72;
+    out property <color> danger: #ff6467;
+    out property <color> danger-hover: #ff646426;
+    out property <color> danger-pressed: #ff646440;
+
+    // Hero panel gradient (--gradient-deep-night)
+    out property <brush> deep-night: @linear-gradient(135deg, #2c3344 0%, #0b0f19 100%);
 
     // Capture overlay (the frame is dimmed to half brightness in capture.rs)
-    out property <color> selection-edge: #c7d7e6; // selection frame
+    out property <color> chip: #101828eb;    // hint and size plates over the frame
+    out property <color> selection-edge: #51a2ff;
 
-    // Type: Segoe UI Variable is the system-ui substitute for Inter on Windows 11
-    // (Segoe UI on Windows 10). 440/530 weights map to the variable axis when present.
-    // One pixel above the web console in media/DESIGN.md, for readability at 100% scale.
-    out property <string> font-family: "Segoe UI Variable Text";
+    // Type: IBM Plex Sans stands in for Source Sans Pro (bundled in assets/fonts);
+    // Consolas for IBM Plex Mono. Regular and SemiBold are the only weights used.
+    out property <string> font-family: "IBM Plex Sans";
     out property <string> mono-family: "Consolas";
-    out property <length> text-label: 12px;
-    out property <length> text-caption: 13px;
+    out property <length> text-caption: 12px;
+    out property <length> text-small: 13px;
     out property <length> text-body: 14px;
-    out property <length> text-heading: 16px;
-    out property <int> weight-book: 440;
-    out property <int> weight-medium: 500;
-    out property <int> weight-strong: 530;
+    out property <length> text-title: 16px;
+    out property <length> text-heading: 20px;
+    out property <length> text-display: 30px;
+    out property <int> weight-regular: 400;
+    out property <int> weight-semibold: 600;
 
-    // Radii
-    out property <length> radius-xs: 2px;
+    // Radii: tags and nav 4, buttons, inputs and cards 8, large containers 12, pills 25.6
     out property <length> radius-sm: 4px;
-    out property <length> radius-md: 6px;
+    out property <length> radius-md: 8px;
+    out property <length> radius-lg: 12px;
+    out property <length> radius-pill: 25.6px;
 }

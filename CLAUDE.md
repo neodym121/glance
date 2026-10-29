@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Glance is a Windows-only tray app (Rust 2024, [Slint](https://slint.dev) UI): a global hotkey freezes the screen, the user drags over text, and the selection is recognized (local Paddle OCR or a cloud vision model) and optionally translated. No WebView or browser engine; idle memory (~2 MB) is a deliberate design goal.
+Glance is a Windows-only tray app (Rust, [Slint](https://slint.dev) UI): a global hotkey freezes the screen, the user drags over text, and the selection is recognized (local Paddle OCR or a cloud vision model) and optionally translated. No WebView or browser engine; idle memory (~2 MB) is a deliberate design goal.
 
 ## Commands
 
@@ -43,5 +43,6 @@ python tools/make_icons.py                # regenerates assets/*.ico and glance.
 
 - Slint uses the software renderer only (no GPU context) with the winit backend; `unstable-winit-030` is tied to the Slint minor version, so upgrade Slint deliberately.
 - The software renderer repaints only changed regions. The overlay relies on this: the dimmed image is the backdrop and the original shows only inside the selection, so geometry that follows the pointer must not span the whole screen (see the header of `ui/overlay.slint`).
-- Design tokens are in `ui/theme.slint`; their source, `media/DESIGN.md`, is git-ignored and local only. Shared widgets are in `ui/components.slint`.
+- Design tokens are in `ui/theme.slint`; their source, `media/DESIGN.md`, is git-ignored and local only. That source is a light theme, so the app uses a dark mapping of it (the mapping rules are the header of `theme.slint`). Shared widgets are in `ui/components.slint`.
+- The UI font is IBM Plex Sans (Regular and SemiBold), bundled from `assets/fonts` and imported in `theme.slint`; use only those two weights. The software renderer fills gradients to the square box and ignores `border-radius` on them, so cards, buttons and selects use `GradientFill` (the native gradient with its four corners covered in the color behind it, so it only suits a card on the page color or a control on a card's right half) with the edge drawn as a separate `Rectangle` over it; the sidebar and popup are square and use a plain `@linear-gradient`. Do not build a gradient from stacked solid bands: they step all three channels at once and show as stripes, where the native one steps one channel at a time. The renderer does not dither, so a one-level step per channel is the finest it gets. `Color.mix(other, f)` takes `f` as the share of the receiver, not of `other`.
 - User-facing text produced in Rust belongs in `src/strings.rs`; Slint text uses `@tr()`.
