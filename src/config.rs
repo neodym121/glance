@@ -35,9 +35,6 @@ impl Default for Config {
 #[serde(default)]
 pub struct OcrConfig {
     pub provider: OcrProvider,
-    /// Script code of the Paddle OCR models (`ocr::paddle_models::SCRIPTS`);
-    /// empty means Automatic, picked from the Windows locale.
-    pub paddle_script: String,
     pub models: Models,
     pub routes: Routes,
 }
@@ -162,7 +159,6 @@ mod tests {
     fn round_trips_through_json() {
         let mut config = Config::default();
         config.ocr.provider = OcrProvider::Paddle;
-        config.ocr.paddle_script = "eslav".into();
         config.ocr.models.groq = "some/model".into();
         config.ocr.routes.polza = "Amazon Bedrock".into();
         config.translation.provider = TranslationProvider::DeepL;

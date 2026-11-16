@@ -1,12 +1,13 @@
 //! Runs the local Paddle OCR engine on an image and prints what it read, with
 //! timing — for checking recognition quality and speed on real screenshots.
 //!
-//!     cargo run --example paddle_smoke -- <image.png> [script-code]
+//!     cargo run --example paddle_smoke -- <image.png> [model]
 //!
-//! The script code defaults to Automatic (resolved from the Windows locale); the
-//! model files must already be downloaded (%APPDATA%\Glance\models\paddle-ocrv5,
-//! see Settings → Recognition). The pipeline mirrors `src/ocr/paddle.rs`; keep the
-//! two in sync when the preprocessing there changes.
+//! The model defaults to `latin`; `cyrillic`, `el`, `arabic`, `korean` and
+//! `universal` are the others (`src/ocr/paddle_models.rs`). The files must already
+//! be downloaded (%APPDATA%\Glance\models\paddle-ocrv5, see Settings →
+//! Recognition). The pipeline mirrors `src/ocr/paddle.rs`; keep the two in sync
+//! when the preprocessing there changes.
 
 use std::time::Instant;
 
@@ -14,22 +15,18 @@ use oar_ocr::oarocr::OAROCRBuilder;
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    let (Some(path), script_setting) = (args.next(), args.next().unwrap_or_default()) else {
-        eprintln!("usage: paddle_smoke <image.png> [script-code]");
+    let (Some(path), model_setting) = (args.next(), args.next().unwrap_or_default()) else {
+        eprintln!("usage: paddle_smoke <image.png> [model]");
         std::process::exit(2);
     };
     let image = read_png(&path).unwrap_or_else(|e| panic!("could not read {path}: {e}"));
 
-    // Same script resolution and path lookup as the recognizer.
-    let script = script_for(&script_setting);
+    // Same file names the recognizer looks for.
+    let model = model_for(&model_setting);
     let dir = std::env::var_os("APPDATA")
         .map(|base| std::path::PathBuf::from(base).join("Glance").join("models").join("paddle-ocrv5"))
         .expect("APPDATA");
-    let (det, rec, dict) = (
-        dir.join("pp-ocrv5_mobile_det.onnx"),
-        dir.join(format!("{}_pp-ocrv5_mobile_rec.onnx", script.rec_prefix)),
-        dir.join(script.dict),
-    );
+    let (det, rec, dict) = (dir.join("pp-ocrv5_mobile_det.onnx"), dir.join(model.rec), dir.join(model.dict));
     for file in [&det, &rec, &dict] {
         if !file.exists() {
             panic!("model file missing: {} — download it in Settings → Recognition", file.display());
@@ -57,23 +54,25 @@ fn main() {
     println!("{}\n---\n{}", regions.len(), text.join(" "));
 }
 
-/// The script table of `src/ocr/paddle_models.rs`, reduced to what a smoke run
-/// needs: the recognition model's file-name prefix and the dictionary.
-struct SmokeScript {
-    code: &'static str,
-    rec_prefix: &'static str,
+/// The model table of `src/ocr/paddle_models.rs`, reduced to what a smoke run
+/// needs: the recognizer file and its dictionary.
+struct SmokeModel {
+    name: &'static str,
+    rec: &'static str,
     dict: &'static str,
 }
 
-const SCRIPTS: &[SmokeScript] = &[
-    SmokeScript { code: "eslav", rec_prefix: "eslav", dict: "ppocrv5_eslav_dict.txt" },
-    SmokeScript { code: "en", rec_prefix: "en", dict: "ppocrv5_en_dict.txt" },
+const MODELS: &[SmokeModel] = &[
+    SmokeModel { name: "latin", rec: "latin_pp-ocrv5_mobile_rec.onnx", dict: "ppocrv5_latin_dict.txt" },
+    SmokeModel { name: "cyrillic", rec: "cyrillic_pp-ocrv5_mobile_rec.onnx", dict: "ppocrv5_cyrillic_dict.txt" },
+    SmokeModel { name: "el", rec: "el_pp-ocrv5_mobile_rec.onnx", dict: "ppocrv5_el_dict.txt" },
+    SmokeModel { name: "arabic", rec: "arabic_pp-ocrv5_mobile_rec.onnx", dict: "ppocrv5_arabic_dict.txt" },
+    SmokeModel { name: "korean", rec: "korean_pp-ocrv5_mobile_rec.onnx", dict: "ppocrv5_korean_dict.txt" },
+    SmokeModel { name: "universal", rec: "pp-ocrv5_mobile_rec.onnx", dict: "ppocrv5_dict.txt" },
 ];
 
-fn script_for(setting: &str) -> &'static SmokeScript {
-    // A named code wins; anything else falls back to East Slavic (the Windows
-    // locale the app would consult is not worth reaching for in a smoke run).
-    SCRIPTS.iter().find(|s| s.code.eq_ignore_ascii_case(setting.trim())).unwrap_or(&SCRIPTS[0])
+fn model_for(setting: &str) -> &'static SmokeModel {
+    MODELS.iter().find(|m| m.name.eq_ignore_ascii_case(setting.trim())).unwrap_or(&MODELS[0])
 }
 
 /// 3 or 2 while the enlarged long side stays within the detector's 960 px input

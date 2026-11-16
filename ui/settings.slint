@@ -3,8 +3,8 @@
 
 import { Theme } from "theme.slint";
 import {
-    Button, ButtonKind, Card, Divider, Icon, ListView, NavItem, SectionTitle, Select, SettingsRow,
-    Switch, Tag, TextField
+    Button, ButtonKind, Card, Divider, DownloadBar, Icon, ListView, NavItem, SectionTitle, Select,
+    SettingsRow, Switch, Tag, TextField
 } from "components.slint";
 
 export struct HotkeyCapture {
@@ -444,9 +444,7 @@ export component SettingsWindow inherits Window {
     // Recognition: 0 Paddle OCR, 1-4 AI providers
     in property <[string]> ocr-providers;
     in-out property <int> ocr-provider;
-    // Paddle OCR: the script picker and the state of its model files.
-    in property <[string]> paddle-languages;
-    in-out property <int> paddle-language-index;
+    // Paddle OCR: the two built-in recognizers and the optional pack of the rest.
     in property <bool> paddle-ready;
     in property <bool> paddle-downloading;
     in property <float> paddle-progress;
@@ -454,6 +452,14 @@ export component SettingsWindow inherits Window {
     // Bytes a download would still move, formatted in Rust; "0.0 MB" when ready.
     in property <string> paddle-size;
     callback download-paddle();
+    in property <bool> pack-ready;
+    in property <bool> pack-downloading;
+    in property <float> pack-progress;
+    in property <string> pack-error;
+    // The whole weight of the pack, formatted in Rust.
+    in property <string> pack-size;
+    callback download-pack();
+    callback delete-pack();
     in-out property <string> ocr-model-gemini;
     in-out property <string> ocr-model-mistral;
     in-out property <string> ocr-model-groq;
@@ -757,7 +763,7 @@ export component SettingsWindow inherits Window {
                                 SettingsRow {
                                     title: @tr("Engine");
                                     description: root.ocr-provider == 0
-                                        ? @tr("Paddle OCR runs on this PC. Nothing leaves your computer; its model files are downloaded once, from the card below.")
+                                        ? @tr("Paddle OCR runs on this PC and picks the model for the text by itself. Nothing leaves your computer; the model files are downloaded once, from the cards below.")
                                         : @tr("A vision model reads the image. The selected area is sent to the provider.");
 
                                     Select {
@@ -773,53 +779,19 @@ export component SettingsWindow inherits Window {
 
                                 Card {
                                     SettingsRow {
-                                        title: @tr("Language");
-                                        description: @tr("Automatic picks Slavic for a Slavic Windows language, English otherwise. The Slavic model reads Russian, Ukrainian and Belarusian; both also read the other's text.");
-
-                                        Select {
-                                            width: 240px;
-                                            model: root.paddle-languages;
-                                            current-index <=> root.paddle-language-index;
-                                        }
-                                    }
-
-                                    Divider { }
-
-                                    SettingsRow {
                                         title: @tr("Model files");
                                         description: root.paddle-error != ""
                                             ? root.paddle-error
                                             : root.paddle-ready
-                                            ? @tr("Downloaded. Recognition runs entirely on this PC.")
-                                            : @tr("Not downloaded yet.");
+                                            ? @tr("Latin and Cyrillic are downloaded.")
+                                            : @tr("Latin and Cyrillic, {} to download.", root.paddle-size);
                                         description-color: root.paddle-error != "" ? Theme.danger : Theme.text-muted;
 
-                                        if root.paddle-downloading: HorizontalLayout {
-                                            spacing: 10px;
-
-                                            Rectangle {
-                                                width: 120px;
-                                                height: 6px;
-                                                border-radius: 3px;
-                                                background: Theme.raised;
-
-                                                Rectangle {
-                                                    x: 0;
-                                                    width: parent.width * min(1.0, root.paddle-progress);
-                                                    height: parent.height;
-                                                    border-radius: 3px;
-                                                    background: Theme.link;
-                                                }
-                                            }
-
-                                            Text {
-                                                text: @tr("Downloading…");
-                                                color: Theme.text-muted;
-                                                vertical-alignment: center;
-                                            }
+                                        if root.paddle-downloading: DownloadBar {
+                                            progress: root.paddle-progress;
                                         }
 
-                                        if !root.paddle-downloading && !root.paddle-ready: Button {
+                                        if !root.paddle-downloading && !root.pack-downloading && !root.paddle-ready: Button {
                                             text: @tr("Download");
                                             icon: @image-url("icons/download.svg");
                                             clicked => {
@@ -829,6 +801,38 @@ export component SettingsWindow inherits Window {
 
                                         if root.paddle-ready: Tag {
                                             text: @tr("Ready");
+                                        }
+                                    }
+                                }
+
+                                Card {
+                                    SettingsRow {
+                                        title: @tr("Additional language pack");
+                                        description: root.pack-error != ""
+                                            ? root.pack-error
+                                            : root.pack-ready
+                                            ? @tr("Greek, Arabic, Korean, Chinese and Japanese are downloaded.")
+                                            : @tr("Greek, Arabic, Korean, Chinese and Japanese, {} to download.", root.pack-size);
+                                        description-color: root.pack-error != "" ? Theme.danger : Theme.text-muted;
+
+                                        if root.pack-downloading: DownloadBar {
+                                            progress: root.pack-progress;
+                                        }
+
+                                        if !root.pack-downloading && !root.paddle-downloading && !root.pack-ready: Button {
+                                            text: @tr("Download");
+                                            icon: @image-url("icons/download.svg");
+                                            clicked => {
+                                                root.download-pack();
+                                            }
+                                        }
+
+                                        if root.pack-ready && !root.pack-downloading: Button {
+                                            text: @tr("Delete");
+                                            kind: ButtonKind.danger;
+                                            clicked => {
+                                                root.delete-pack();
+                                            }
                                         }
                                     }
                                 }

@@ -15,10 +15,11 @@ use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 use crate::config::{self, Config};
 use crate::error::{Error, Result};
 use crate::models::ModelInfo;
+use crate::ocr::paddle_models;
 use crate::providers::AiProvider;
 use crate::settings::{self, KeyChange, Settings};
 use crate::tray::Tray;
-use crate::{hotkey, languages, links, ocr, overlay, popup, secrets, strings, translate, win32, window_role};
+use crate::{hotkey, links, ocr, overlay, popup, secrets, strings, translate, win32, window_role};
 
 pub enum Action {
     Capture,
@@ -42,7 +43,8 @@ pub enum Action {
     ModelsFilter,
     ModelsPicked,
     ModelsLoaded { provider: AiProvider, result: Result<Vec<ModelInfo>> },
-    PaddleDownload,
+    PaddleDownload(paddle_models::Pack),
+    PaddleDelete(paddle_models::Pack),
     PaddleDownloadProgress { done: u64, total: u64 },
     PaddleDownloadDone { result: Result<()> },
 }
@@ -107,6 +109,8 @@ pub fn run() -> Result<()> {
     let config = config::load();
     // No open/close animation for Glance's windows: the overlay must appear at once.
     win32::disable_window_animations();
+    // Model files of earlier versions would sit in %APPDATA% for nothing.
+    ocr::paddle_models::clean_up();
     let hotkeys = GlobalHotKeyManager::new().map_err(|e| Error::new(format!("Global shortcuts are unavailable: {e}")))?;
     let registered = hotkey::parse(&config.hotkey).filter(|hk| hotkeys.register(*hk).is_ok());
     if registered.is_none() {
@@ -223,9 +227,14 @@ impl App {
                     settings.models_loaded(provider, result);
                 }
             }
-            Action::PaddleDownload => {
+            Action::PaddleDownload(pack) => {
                 if let Some(settings) = self.settings.as_mut() {
-                    settings.start_paddle_download();
+                    settings.start_paddle_download(pack);
+                }
+            }
+            Action::PaddleDelete(pack) => {
+                if let Some(settings) = self.settings.as_mut() {
+                    settings.delete_paddle(pack);
                 }
             }
             Action::PaddleDownloadProgress { done, total } => {
@@ -280,8 +289,7 @@ impl App {
         };
         // The popup opens while the overlay still owns the foreground, so it can take
         // keyboard focus; then the overlay and its frames are released.
-        let translation_label = self.translation_label();
-        let popup = popup::Session::open(&selection, ocr::engine_label(&self.config.ocr), translation_label);
+        let popup = popup::Session::open(&selection);
         session.close();
         schedule_trim();
         match popup {
@@ -316,11 +324,6 @@ impl App {
         if popup.toggle_translation() {
             translate::spawn(self.job, popup.original().to_owned(), self.config.translation.clone());
         }
-    }
-
-    fn translation_label(&self) -> String {
-        let target = languages::find(&self.config.translation.target).map_or("English", |l| l.name);
-        format!("{} · {target}", self.config.translation.provider.name())
     }
 
     fn open_settings(&mut self) {
@@ -364,7 +367,8 @@ impl App {
     /// Settings save themselves: there is no Save button.
     fn poll_settings(&mut self) {
         if let Some(settings) = self.settings.as_ref() {
-            // A new Paddle language changes what counts as downloaded.
+            // The Paddle cards show what is on disk, and a download may have just
+            // finished on its worker thread.
             settings.update_paddle();
         }
         let Some((now, keys)) = self.settings.as_ref().map(|s| {

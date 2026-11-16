@@ -44,6 +44,10 @@ pub fn paddle_models_missing() -> String {
     "The Paddle OCR models are not downloaded yet. Pick Paddle OCR in Settings → Recognition and press Download.".to_owned()
 }
 
+pub fn paddle_delete_failed(name: &str, detail: &str) -> String {
+    format!("Could not delete {name}: {detail}.")
+}
+
 pub fn paddle_failed(detail: &str) -> String {
     format!("Local recognition failed: {detail}")
 }
@@ -60,8 +64,6 @@ pub fn paddle_corrupt(name: &str) -> String {
 pub fn paddle_size(bytes: u64) -> String {
     format!("{bytes:.1} MB", bytes = bytes as f64 / 1_048_576.0)
 }
-
-pub const AUTOMATIC_LANGUAGE: &str = "Automatic";
 
 pub const MODELS_LOADING: &str = "Loading models…";
 pub const MODELS_NO_MATCH: &str = "No models match.";

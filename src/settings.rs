@@ -14,9 +14,10 @@ use crate::config::{Config, Models, Routes};
 use crate::error::Result;
 use crate::languages::{self, LANGUAGES};
 use crate::models::{self, Catalog, ModelInfo, Purpose};
+use crate::ocr::paddle_models;
 use crate::providers::{AiProvider, OcrProvider, Secret, TranslationProvider};
 use crate::window_role::{self, Role};
-use crate::{EditKeys, HotkeyCapture, ModelItem, ModelList, SettingsWindow, hotkey, ocr, secrets, strings, win32};
+use crate::{EditKeys, HotkeyCapture, ModelItem, ModelList, SettingsWindow, hotkey, secrets, strings, win32};
 
 pub enum KeyChange {
     Store(Secret, String),
@@ -57,17 +58,15 @@ enum Scroll {
     Selected,
 }
 
-/// The Paddle OCR model download shown on the Recognition page.
+/// The Paddle OCR model downloads shown on the Recognition page.
 enum PaddleState {
     Idle,
-    Downloading { done: u64, total: u64 },
-    Failed(String),
+    Downloading { pack: paddle_models::Pack, done: u64, total: u64 },
+    Failed { pack: paddle_models::Pack, message: String },
 }
 
 pub struct Settings {
     window: SettingsWindow,
-    /// Script codes behind the Paddle language list; "" is Automatic.
-    paddle_codes: Vec<String>,
     paddle: PaddleState,
     applied: Snapshot,
     /// Model lists per provider: the cache file, refreshed by fetches.
@@ -161,20 +160,10 @@ impl Settings {
         let provider_index = OcrProvider::ALL.iter().position(|p| *p == config.ocr.provider).unwrap_or(0);
         window.set_ocr_provider(provider_index as i32);
 
-        // Paddle OCR: Automatic plus one entry per script.
-        let mut paddle_codes = vec![String::new()];
-        let mut paddle_labels = vec![strings::AUTOMATIC_LANGUAGE.to_owned()];
-        for script in ocr::paddle_models::SCRIPTS {
-            paddle_codes.push(script.code.to_owned());
-            paddle_labels.push(script.label.to_owned());
-        }
-        let paddle_index = paddle_codes
-            .iter()
-            .position(|c| c.eq_ignore_ascii_case(config.ocr.paddle_script.trim()))
-            .unwrap_or(0);
-        window.set_paddle_languages(string_model(paddle_labels));
-        window.set_paddle_language_index(paddle_index as i32);
-        window.on_download_paddle(|| app::post(Action::PaddleDownload));
+        // Paddle OCR: the files it runs on are downloaded from the Recognition page.
+        window.on_download_paddle(|| app::post(Action::PaddleDownload(paddle_models::Pack::BuiltIn)));
+        window.on_download_pack(|| app::post(Action::PaddleDownload(paddle_models::Pack::Extra)));
+        window.on_delete_pack(|| app::post(Action::PaddleDelete(paddle_models::Pack::Extra)));
 
         let models = &config.ocr.models;
         window.set_ocr_model_gemini(models.gemini.as_str().into());
@@ -237,7 +226,6 @@ impl Settings {
         poll.start(slint::TimerMode::Repeated, Duration::from_millis(400), || app::post(Action::SettingsPoll));
         let mut settings = Self {
             window,
-            paddle_codes,
             paddle: PaddleState::Idle,
             applied: Snapshot { config: config.clone(), keys: Vec::new(), autostart: false },
             catalog: models::load_cache(),
@@ -270,8 +258,6 @@ impl Settings {
         config.auto_copy = w.get_auto_copy();
 
         config.ocr.provider = OcrProvider::ALL.get(w.get_ocr_provider() as usize).copied().unwrap_or_default();
-        config.ocr.paddle_script =
-            self.paddle_codes.get(w.get_paddle_language_index() as usize).cloned().unwrap_or_default();
         config.ocr.models = Models {
             gemini: text(w.get_ocr_model_gemini()),
             mistral: text(w.get_ocr_model_mistral()),
@@ -439,55 +425,73 @@ impl Settings {
         }
     }
 
-    /// Pushes the Paddle model state to the window: ready, missing (with the bytes
-    /// a download would move), a running download's progress, or the last error.
+    /// Pushes the Paddle model state to the window: what is ready, what a download
+    /// would move, a running download's progress, or the last error.
     pub fn update_paddle(&self) {
         let w = &self.window;
-        let code = self.paddle_codes.get(w.get_paddle_language_index() as usize).map(String::as_str).unwrap_or("");
-        let script = ocr::paddle_models::resolve(code);
-        let (ready, downloading, progress, error) = match &self.paddle {
-            PaddleState::Idle => (ocr::paddle_models::paths(script).is_some(), false, 0.0, String::new()),
-            PaddleState::Downloading { done, total } => {
+        let state = |pack: paddle_models::Pack| match &self.paddle {
+            PaddleState::Downloading { pack: running, done, total } if *running == pack => {
                 (false, true, *done as f32 / (*total).max(1) as f32, String::new())
             }
-            PaddleState::Failed(message) => (false, false, 0.0, message.clone()),
+            PaddleState::Failed { pack: failed, message } if *failed == pack => {
+                (false, false, 0.0, message.clone())
+            }
+            _ => (paddle_models::ready(pack), false, 0.0, String::new()),
         };
+        let (ready, downloading, progress, error) = state(paddle_models::Pack::BuiltIn);
         w.set_paddle_ready(ready);
         w.set_paddle_downloading(downloading);
         w.set_paddle_progress(progress.clamp(0.0, 1.0));
         w.set_paddle_error(error.into());
-        w.set_paddle_size(strings::paddle_size(ocr::paddle_models::download_size(script)).into());
+        w.set_paddle_size(strings::paddle_size(paddle_models::download_size(paddle_models::Pack::BuiltIn)).into());
+
+        let (ready, downloading, progress, error) = state(paddle_models::Pack::Extra);
+        w.set_pack_ready(ready);
+        w.set_pack_downloading(downloading);
+        w.set_pack_progress(progress.clamp(0.0, 1.0));
+        w.set_pack_error(error.into());
+        w.set_pack_size(strings::paddle_size(paddle_models::size(paddle_models::Pack::Extra)).into());
     }
 
-    /// Starts downloading the models of the language picked on screen. Clicks while
-    /// a download runs are ignored; the progress bar replaces the button by then.
-    pub fn start_paddle_download(&mut self) {
+    /// Starts downloading one pack. Clicks while a download runs are ignored; the
+    /// progress bar replaces the buttons by then.
+    pub fn start_paddle_download(&mut self, pack: paddle_models::Pack) {
         if matches!(self.paddle, PaddleState::Downloading { .. }) {
             return;
         }
-        let code = self
-            .paddle_codes
-            .get(self.window.get_paddle_language_index() as usize)
-            .cloned()
-            .unwrap_or_default();
-        let script = ocr::paddle_models::resolve(&code);
-        let total = ocr::paddle_models::download_size(script);
-        self.paddle = PaddleState::Downloading { done: 0, total };
+        let total = paddle_models::download_size(pack);
+        self.paddle = PaddleState::Downloading { pack, done: 0, total };
         self.update_paddle();
-        ocr::paddle_models::spawn(script);
+        paddle_models::spawn(pack);
+    }
+
+    /// Removes a pack from disk. Only the optional pack is ever offered for delete.
+    pub fn delete_paddle(&mut self, pack: paddle_models::Pack) {
+        if matches!(self.paddle, PaddleState::Downloading { .. }) {
+            return;
+        }
+        self.paddle = match paddle_models::delete(pack) {
+            Ok(()) => PaddleState::Idle,
+            Err(e) => PaddleState::Failed { pack, message: e.to_string() },
+        };
+        self.update_paddle();
     }
 
     pub fn paddle_progress(&mut self, done: u64, total: u64) {
-        if let PaddleState::Downloading { .. } = self.paddle {
-            self.paddle = PaddleState::Downloading { done, total };
+        if let PaddleState::Downloading { pack, .. } = self.paddle {
+            self.paddle = PaddleState::Downloading { pack, done, total };
             self.update_paddle();
         }
     }
 
     pub fn paddle_download_done(&mut self, result: Result<()>) {
+        let pack = match &self.paddle {
+            PaddleState::Downloading { pack, .. } => *pack,
+            _ => paddle_models::Pack::BuiltIn,
+        };
         self.paddle = match result {
             Ok(()) => PaddleState::Idle,
-            Err(e) => PaddleState::Failed(e.to_string()),
+            Err(e) => PaddleState::Failed { pack, message: e.to_string() },
         };
         self.update_paddle();
     }

@@ -97,8 +97,6 @@ fn main() {
         if name == "popup-text" {
             popup.set_status("Copied to clipboard".into());
             popup.set_status_ok(true);
-        } else {
-            popup.set_status(if translated { "DeepL · Russian" } else { "Paddle OCR · East Slavic" }.into());
         }
         popup.show().unwrap();
         render(&window, scale, popup.get_popup_width(), popup.get_desired_height(), &out.join(format!("{name}.png")));
@@ -153,12 +151,12 @@ fn main() {
         settings.set_page(1);
         settings.set_ocr_providers(strings(&["Paddle OCR", "Gemini", "Mistral", "Groq", "Polza AI"]));
         settings.set_ocr_provider(0);
-        settings.set_paddle_languages(strings(&["Automatic", "Slavic", "English"]));
-        settings.set_paddle_language_index(1);
         settings.set_paddle_ready(ready);
         settings.set_paddle_downloading(downloading);
         settings.set_paddle_progress(progress as f32);
-        settings.set_paddle_size("12.4 MB".into());
+        settings.set_paddle_size("20.0 MB".into());
+        settings.set_pack_ready(ready);
+        settings.set_pack_size("43.9 MB".into());
         settings.show().unwrap();
         render(&window, scale, 920.0, 900.0, &out.join(format!("{name}.png")));
     }

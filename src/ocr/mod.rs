@@ -9,7 +9,6 @@ use crate::app::{self, Action};
 use crate::config::OcrConfig;
 use crate::error::{Error, Result};
 use crate::imaging::RgbImage;
-use crate::providers::OcrProvider;
 use crate::{secrets, strings};
 
 pub trait Recognizer {
@@ -66,25 +65,7 @@ fn recognizer_for(config: &OcrConfig) -> Result<Box<dyn Recognizer>> {
             let route = config.routes.get(provider).trim().to_owned();
             Ok(Box::new(vision::VisionOcr { provider, model, route, key }))
         }
-        None => Ok(Box::new(paddle::PaddleOcr::new(&config.paddle_script))),
-    }
-}
-
-/// Footer caption describing the engine, e.g. "Paddle OCR · East Slavic" or "Groq · model-id".
-pub fn engine_label(config: &OcrConfig) -> String {
-    match config.provider.ai() {
-        Some(provider) => {
-            let model = match config.models.get(provider).trim() {
-                "" => provider.default_vision_model(),
-                custom => custom,
-            };
-            format!("{} · {model}", provider.name())
-        }
-        None => format!(
-            "{} · {}",
-            OcrProvider::Paddle.name(),
-            paddle_models::resolve(&config.paddle_script).short
-        ),
+        None => Ok(Box::new(paddle::PaddleOcr)),
     }
 }
 

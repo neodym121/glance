@@ -1,8 +1,10 @@
-//! The model files of the local Paddle OCR engine: which scripts exist, where the
-//! files live, and how Settings downloads them. One recognition model per script
-//! plus a shared detector, ~12 MB together, stored in %APPDATA%\Glance\models and
-//! fetched once from the oar-ocr GitHub release. Names, sizes and hashes mirror the
-//! crate's own model registry (oar-ocr-core `download::registry`).
+//! The model files of the local Paddle OCR engine: where they live, what Settings
+//! downloads, and which recognizer to try on a crop. The detector (where the text
+//! is) is shared; each script needs its own recognizer (what the characters look
+//! like) plus a dictionary of the characters it may output. Latin and Cyrillic come
+//! with the app, every other script is one optional pack, all of it fetched from
+//! the oar-ocr GitHub release into %APPDATA%\Glance\models. Names, sizes and hashes
+//! mirror the crate's own model registry (oar-ocr-core `download::registry`).
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -22,19 +24,51 @@ pub struct ModelFile {
     pub size: u64,
 }
 
-/// A recognition model plus its dictionary. The detector is shared by all scripts.
-pub struct Script {
-    /// Value stored in the config and shown by the Settings picker.
-    pub code: &'static str,
-    /// Full label for the Settings picker.
-    pub label: &'static str,
-    /// Short name for the popup footer.
-    pub short: &'static str,
-    /// Windows locales (primary subtag) this script reads best; the first match
-    /// wins for the Automatic setting.
-    pub locales: &'static [&'static str],
-    pub rec: ModelFile,
+/// A recognizer and the dictionary of the characters it can output.
+pub struct Rec {
+    /// The script this recognizer is meant for.
+    pub script: Script,
+    rec: ModelFile,
     dict: ModelFile,
+}
+
+impl Rec {
+    fn files(&self) -> [&ModelFile; 2] {
+        [&self.rec, &self.dict]
+    }
+}
+
+/// The writing system a text is mostly made of.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Script {
+    Latin,
+    Cyrillic,
+    Greek,
+    Arabic,
+    Korean,
+    Han,
+}
+
+impl Script {
+    /// The recognizer that reads this script.
+    pub fn rec(self) -> &'static Rec {
+        match self {
+            Self::Latin => &LATIN,
+            Self::Cyrillic => &CYRILLIC,
+            Self::Greek => &GREEK,
+            Self::Arabic => &ARABIC,
+            Self::Korean => &KOREAN,
+            Self::Han => &UNIVERSAL,
+        }
+    }
+}
+
+/// The two downloads Settings offers: the files the engine needs to work at all,
+/// and the one optional pack with the remaining scripts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pack {
+    BuiltIn,
+    Extra,
 }
 
 const DETECTOR: ModelFile = ModelFile {
@@ -43,63 +77,114 @@ const DETECTOR: ModelFile = ModelFile {
     size: 4_826_518,
 };
 
-/// The scripts worth offering. More exist upstream (Greek, Korean, Arabic, Thai,
-/// Devanagari, Tamil, Telugu, Chinese, a pan-Cyrillic and a pan-Latin model), but
-/// on real captures their quality is indistinguishable from these two, so the
-/// picker stays short. Both models also read the other's text passably.
-pub const SCRIPTS: &[Script] = &[
-    Script {
-        code: "eslav",
-        label: "Slavic",
-        short: "Slavic",
-        // East Slavic Windows locales; the model reads Russian, Ukrainian and
-        // Belarusian plus Latin text.
-        locales: &["ru", "uk", "be"],
-        rec: ModelFile {
-            name: "eslav_pp-ocrv5_mobile_rec.onnx",
-            sha256: "36a66a68097e88b103e0f60f489e88c7239d3ea79d96fbac2d80ac9d134944cd",
-            size: 7_915_218,
-        },
-        dict: ModelFile {
-            name: "ppocrv5_eslav_dict.txt",
-            sha256: "3e95f1581557162870cacdba5af91a4c6be2890710d395b0c3c7578e7ee5e6eb",
-            size: 1_663,
-        },
+const LATIN: Rec = Rec {
+    script: Script::Latin,
+    rec: ModelFile {
+        name: "latin_pp-ocrv5_mobile_rec.onnx",
+        sha256: "e3a6bfeea1c8a01d6fccfd480a0bd363fd907f8c65931e228bb2736f5c3e142f",
+        size: 8_069_614,
     },
-    Script {
-        code: "en",
-        label: "English",
-        short: "English",
-        locales: &["en"],
-        rec: ModelFile {
-            name: "en_pp-ocrv5_mobile_rec.onnx",
-            sha256: "8307465d3c9ef2ba4055c3bd0be55aafe11f518630212b7598b70ccb376028ac",
-            size: 7_876_014,
-        },
-        dict: ModelFile {
-            name: "ppocrv5_en_dict.txt",
-            sha256: "e025a66d31f327ba0c232e03f407ae8d105e1e709e7ccb3f408aa778c24e70d6",
-            size: 1_416,
-        },
+    dict: ModelFile {
+        name: "ppocrv5_latin_dict.txt",
+        sha256: "ccbcc45730b3fbbd9050c5bc74db6a99067141ef1035e3d14889a84a6b9b1aff",
+        size: 2_616,
     },
-];
+};
 
-/// The script for a config value: the named one, or the Automatic pick for the
-/// Windows locale — Slavic for East Slavic locales, English for everything else.
-pub fn resolve(setting: &str) -> &'static Script {
-    resolve_for(setting, &crate::win32::user_locale())
+const CYRILLIC: Rec = Rec {
+    script: Script::Cyrillic,
+    rec: ModelFile {
+        name: "cyrillic_pp-ocrv5_mobile_rec.onnx",
+        sha256: "a18d96d7c8d73d90f2ed056549caa1de3a8e6cb744cccba16cd593ea8cd2d569",
+        size: 8_076_390,
+    },
+    dict: ModelFile {
+        name: "ppocrv5_cyrillic_dict.txt",
+        sha256: "db40aa52ceb112055be80c694afdf655d5d2c4f7873704524cc16a447ca913ba",
+        size: 2_781,
+    },
+};
+
+const GREEK: Rec = Rec {
+    script: Script::Greek,
+    rec: ModelFile {
+        name: "el_pp-ocrv5_mobile_rec.onnx",
+        sha256: "5a4a020e48e8783e035e1af135423c2161a363acab9ef16e48238c3d181f0f71",
+        size: 7_836_326,
+    },
+    dict: ModelFile {
+        name: "ppocrv5_el_dict.txt",
+        sha256: "31defc62c0c3ad3674a82da6192226a2ba98ef4ff014a7045cb88d59f9c3de31",
+        size: 1_103,
+    },
+};
+
+const ARABIC: Rec = Rec {
+    script: Script::Arabic,
+    rec: ModelFile {
+        name: "arabic_pp-ocrv5_mobile_rec.onnx",
+        sha256: "2768206d9a0ce48eba45b59619184e18161dde8f44115f029920ca17a9dc0384",
+        size: 8_026_538,
+    },
+    dict: ModelFile {
+        name: "ppocrv5_arabic_dict.txt",
+        sha256: "7f92f7dbb9b75a4787a83bfb4f6d14a8ab515525130c9d40a9036f61cf6999e9",
+        size: 2_369,
+    },
+};
+
+const KOREAN: Rec = Rec {
+    script: Script::Korean,
+    rec: ModelFile {
+        name: "korean_pp-ocrv5_mobile_rec.onnx",
+        sha256: "2d7ed96308065a86103325d22af07a88c4d06afc009f21602a4882342c0cc054",
+        size: 13_446_374,
+    },
+    dict: ModelFile {
+        name: "ppocrv5_korean_dict.txt",
+        sha256: "a88071c68c01707489baa79ebe0405b7beb5cca229f4fc94cc3ef992328802d7",
+        size: 47_451,
+    },
+};
+
+/// The one model the release calls "universal": Chinese (simplified and
+/// traditional), Japanese and English.
+const UNIVERSAL: Rec = Rec {
+    script: Script::Han,
+    rec: ModelFile {
+        name: "pp-ocrv5_mobile_rec.onnx",
+        sha256: "243a0f06d826761323e9045e9b113ab2c191c3aa50565585e628300b8eda0224",
+        size: 16_562_373,
+    },
+    dict: ModelFile {
+        name: "ppocrv5_dict.txt",
+        sha256: "d1979e9f794c464c0d2e0b70a7fe14dd978e9dc644c0e71f14158cdf8342af1b",
+        size: 74_012,
+    },
+};
+
+/// Always installed: most screens are one of these two, and both also read the
+/// other's text passably.
+pub const BUILT_IN: [&Rec; 2] = [&LATIN, &CYRILLIC];
+/// The optional pack: every other script the release has a model for.
+pub const EXTRA: [&Rec; 4] = [&GREEK, &ARABIC, &KOREAN, &UNIVERSAL];
+
+/// The recognizers of a pack.
+fn recs(pack: Pack) -> &'static [&'static Rec] {
+    match pack {
+        Pack::BuiltIn => &BUILT_IN,
+        Pack::Extra => &EXTRA,
+    }
 }
 
-fn resolve_for(setting: &str, locale: &str) -> &'static Script {
-    let code = setting.trim();
-    if let Some(script) = SCRIPTS.iter().find(|s| s.code.eq_ignore_ascii_case(code)) {
-        return script;
+/// Every file of a pack. The detector is shared by all scripts and belongs to the
+/// built-in set, so deleting the optional pack never takes it away.
+fn files(pack: Pack) -> Vec<&'static ModelFile> {
+    let mut files: Vec<&'static ModelFile> = recs(pack).iter().flat_map(|rec| rec.files()).collect();
+    if pack == Pack::BuiltIn {
+        files.push(&DETECTOR);
     }
-    let primary = locale.split('-').next().unwrap_or("").to_ascii_lowercase();
-    SCRIPTS
-        .iter()
-        .find(|s| s.locales.iter().any(|l| *l == primary))
-        .unwrap_or(&SCRIPTS[1])
+    files
 }
 
 /// %APPDATA%\Glance\models\paddle-ocrv5.
@@ -107,21 +192,22 @@ fn dir() -> Option<PathBuf> {
     Some(config::dir()?.join("models").join("paddle-ocrv5"))
 }
 
-/// Paths of the files `script` needs when all of them are on disk with the
-/// published sizes; `None` while something is missing or truncated.
-pub fn paths(script: &Script) -> Option<Files> {
+fn complete(path: &std::path::Path, size: u64) -> bool {
+    std::fs::metadata(path).is_ok_and(|meta| meta.len() == size)
+}
+
+/// Paths of the files `rec` needs when all of them are on disk with the published
+/// sizes; `None` while something is missing or truncated.
+pub fn paths(rec: &Rec) -> Option<Files> {
     let dir = dir()?;
     let files = Files {
         det: dir.join(DETECTOR.name),
-        rec: dir.join(script.rec.name),
-        dict: dir.join(script.dict.name),
+        rec: dir.join(rec.rec.name),
+        dict: dir.join(rec.dict.name),
     };
-    let present = |path: &std::path::Path, size: u64| {
-        std::fs::metadata(path).is_ok_and(|meta| meta.len() == size)
-    };
-    (present(&files.det, DETECTOR.size)
-        && present(&files.rec, script.rec.size)
-        && present(&files.dict, script.dict.size))
+    (complete(&files.det, DETECTOR.size)
+        && complete(&files.rec, rec.rec.size)
+        && complete(&files.dict, rec.dict.size))
     .then_some(files)
 }
 
@@ -132,16 +218,78 @@ pub struct Files {
     pub dict: PathBuf,
 }
 
-/// The files `script` still needs, in download order. Without an APPDATA folder
+/// The files of `pack` still missing, in download order. Without an APPDATA folder
 /// everything counts as missing; the download then fails with its own message.
-pub fn missing(script: &'static Script) -> Vec<&'static ModelFile> {
-    let Some(dir) = dir() else {
-        return vec![&DETECTOR, &script.rec, &script.dict];
-    };
-    [&DETECTOR, &script.rec, &script.dict]
-        .into_iter()
-        .filter(|file| !std::fs::metadata(dir.join(file.name)).is_ok_and(|meta| meta.len() == file.size))
-        .collect()
+pub fn missing(pack: Pack) -> Vec<&'static ModelFile> {
+    let Some(dir) = dir() else { return files(pack) };
+    files(pack).into_iter().filter(|file| !complete(&dir.join(file.name), file.size)).collect()
+}
+
+/// True when every file of `pack` is on disk with the published size.
+pub fn ready(pack: Pack) -> bool {
+    missing(pack).is_empty()
+}
+
+/// The whole weight of `pack`, for the size shown before a download starts.
+pub fn size(pack: Pack) -> u64 {
+    files(pack).iter().map(|file| file.size).sum()
+}
+
+/// Total bytes a download of `pack` will move.
+pub fn download_size(pack: Pack) -> u64 {
+    missing(pack).iter().map(|file| file.size).sum()
+}
+
+/// The recognizers that can run now: the built-in two plus whatever the optional
+/// pack put on disk.
+pub fn available() -> Vec<&'static Rec> {
+    BUILT_IN.iter().chain(EXTRA.iter()).copied().filter(|rec| paths(rec).is_some()).collect()
+}
+
+/// The recognizers to try for one crop, the script the Windows locale suggests
+/// first. It is only a guess: the engine settles it by the scores (see `paddle`).
+pub fn candidates() -> Vec<&'static Rec> {
+    let mut list = available();
+    let preferred = preferred_for(&crate::win32::user_locale());
+    if let Some(position) = list.iter().position(|rec| rec.script == preferred.script) {
+        list.rotate_left(position);
+    }
+    list
+}
+
+/// The recognizer a locale suggests. Locales no model covers get Latin.
+fn preferred_for(locale: &str) -> &'static Rec {
+    match locale.split('-').next().unwrap_or("").to_ascii_lowercase().as_str() {
+        "el" => &GREEK,
+        "ar" | "fa" | "ur" | "ps" | "sd" | "ug" => &ARABIC,
+        "ko" => &KOREAN,
+        "zh" | "ja" => &UNIVERSAL,
+        "ru" | "uk" | "be" | "bg" | "sr" | "mk" | "kk" | "ky" | "mn" | "tg" | "tt" | "ba" | "cv" | "ce"
+        | "os" => &CYRILLIC,
+        _ => &LATIN,
+    }
+}
+
+/// The script a text is mostly written in, counted over its letters; `None` when
+/// there are none. Characters no model covers count as Latin, which is what the
+/// Latin recognizer does with them anyway.
+pub fn script_of(text: &str) -> Option<Script> {
+    const ORDER: [Script; 6] =
+        [Script::Latin, Script::Cyrillic, Script::Greek, Script::Arabic, Script::Korean, Script::Han];
+    let mut counts = [0usize; ORDER.len()];
+    for c in text.chars().filter(|c| c.is_alphabetic()) {
+        let index = match c as u32 {
+            0x0400..=0x052F | 0x2DE0..=0x2DFF | 0xA640..=0xA69F => 1,
+            0x0370..=0x03FF | 0x1F00..=0x1FFF => 2,
+            0x0600..=0x06FF | 0x0750..=0x077F | 0x08A0..=0x08FF | 0xFB50..=0xFDFF | 0xFE70..=0xFEFF => 3,
+            0x1100..=0x11FF | 0x3130..=0x318F | 0xA960..=0xA97F | 0xAC00..=0xD7AF => 4,
+            0x3040..=0x30FF | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF => 5,
+            _ => 0,
+        };
+        counts[index] += 1;
+    }
+    let (index, count) = counts.iter().enumerate().max_by_key(|(_, count)| **count)?;
+    (*count > 0).then(|| ORDER[index])
 }
 
 /// The release every file is downloaded from.
@@ -149,18 +297,13 @@ pub fn url(file: &ModelFile) -> String {
     format!("https://github.com/GreatV/oar-ocr/releases/download/v0.3.0/{}", file.name)
 }
 
-/// Total bytes the download will move, for the Settings status line.
-pub fn download_size(script: &'static Script) -> u64 {
-    missing(script).iter().map(|file| file.size).sum()
-}
-
 /// Downloads on a short-lived worker thread, posting progress and the outcome.
-/// One download at a time is enough: the Settings button starts disabled while
-/// one runs.
-pub fn spawn(script: &'static Script) {
+/// One download at a time is enough: the Settings buttons are disabled while one
+/// runs.
+pub fn spawn(pack: Pack) {
     let worker = std::thread::Builder::new().name("glance-paddle-models".into()).spawn(move || {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            download(script, &|done, total| app::post(Action::PaddleDownloadProgress { done, total }))
+            download(pack, &|done, total| app::post(Action::PaddleDownloadProgress { done, total }))
         }))
         .unwrap_or_else(|_| Err(Error::new(strings::paddle_download_failed("the download stopped unexpectedly"))));
         app::post(Action::PaddleDownloadDone { result });
@@ -170,20 +313,62 @@ pub fn spawn(script: &'static Script) {
     }
 }
 
-/// Fetches the files `script` is missing, reporting progress as bytes done out of
+/// Removes the files of `pack` and leaves the rest. Settings only offers this for
+/// the optional pack; the built-in files are what the engine runs on.
+pub fn delete(pack: Pack) -> Result<()> {
+    let Some(dir) = dir() else { return Ok(()) };
+    for file in files(pack) {
+        let path = dir.join(file.name);
+        if path.exists() {
+            std::fs::remove_file(&path)
+                .map_err(|e| Error::new(strings::paddle_delete_failed(file.name, &e.to_string())))?;
+        }
+    }
+    Ok(())
+}
+
+/// Files earlier versions downloaded and no pack uses any more: the East Slavic and
+/// English recognizers, replaced by the Cyrillic and Latin ones.
+const RETIRED: [&str; 4] = [
+    "eslav_pp-ocrv5_mobile_rec.onnx",
+    "ppocrv5_eslav_dict.txt",
+    "en_pp-ocrv5_mobile_rec.onnx",
+    "ppocrv5_en_dict.txt",
+];
+
+/// Removes the files of earlier versions once the current ones are in place.
+fn remove_retired(dir: &std::path::Path) {
+    for name in RETIRED {
+        let path = dir.join(name);
+        if path.exists() {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+/// Drops the files earlier versions downloaded and nothing uses now, so they do not
+/// sit in %APPDATA% for nothing. Called once at startup.
+pub fn clean_up() {
+    if let Some(dir) = dir() {
+        remove_retired(&dir);
+    }
+}
+
+/// Fetches the files `pack` is missing, reporting progress as bytes done out of
 /// the total. Every file is checked against its published SHA-256 before it lands
 /// by atomic rename, so a file is either absent or complete and valid.
-fn download(script: &'static Script, report: &dyn Fn(u64, u64)) -> Result<()> {
+fn download(pack: Pack, report: &dyn Fn(u64, u64)) -> Result<()> {
     let dir = dir().ok_or_else(|| Error::new("The APPDATA folder is not available."))?;
     std::fs::create_dir_all(&dir).map_err(|e| Error::new(strings::paddle_download_failed(&e.to_string())))?;
-    let total = download_size(script);
+    let total = download_size(pack);
     let mut done = 0u64;
-    for file in missing(script) {
+    for file in missing(pack) {
         let bytes = fetch(&url(file), file, done, total, report)?;
         done += file.size;
         config::write_atomic(&dir.join(file.name), &bytes)
             .map_err(|e| Error::new(strings::paddle_download_failed(&e.to_string())))?;
     }
+    remove_retired(&dir);
     Ok(())
 }
 
@@ -248,39 +433,88 @@ mod tests {
     use super::*;
 
     #[test]
-    fn scripts_have_unique_codes_and_known_shapes() {
-        let mut codes: Vec<_> = SCRIPTS.iter().map(|s| s.code).collect();
-        codes.sort();
-        codes.dedup();
-        assert_eq!(codes.len(), SCRIPTS.len());
-        for script in SCRIPTS {
-            assert!(!script.label.is_empty() && !script.short.is_empty(), "{} needs names", script.code);
-            assert!(script.rec.name.ends_with(".onnx") && script.dict.name.ends_with(".txt"));
-            assert_eq!(script.rec.sha256.len(), 64, "{} rec hash", script.code);
-            assert!(script.rec.size > 1_000_000 && script.dict.size < 100_000);
+    fn every_file_is_known_and_distinct() {
+        let all: Vec<&ModelFile> = BUILT_IN
+            .iter()
+            .chain(EXTRA.iter())
+            .flat_map(|rec| rec.files())
+            .chain([&DETECTOR])
+            .collect();
+        let mut names: Vec<_> = all.iter().map(|file| file.name).collect();
+        names.sort();
+        names.dedup();
+        assert_eq!(names.len(), all.len(), "two packs share a file");
+        for file in all {
+            assert_eq!(file.sha256.len(), 64, "{} hash", file.name);
+            assert!(file.size > 1_000);
         }
-        // The Automatic fallback for locales no script claims is English.
-        assert_eq!(SCRIPTS[1].code, "en");
+        for rec in BUILT_IN.iter().chain(EXTRA.iter()) {
+            assert!(rec.rec.name.ends_with(".onnx") && rec.dict.name.ends_with(".txt"));
+            assert!(rec.rec.size > 1_000_000 && rec.dict.size < 100_000);
+        }
     }
 
     #[test]
-    fn locales_map_to_one_script_each() {
-        let mut all: Vec<_> = SCRIPTS.iter().flat_map(|s| s.locales.iter()).collect();
-        all.sort();
-        all.dedup();
-        assert_eq!(all.len(), SCRIPTS.iter().map(|s| s.locales.len()).sum::<usize>(), "a locale names two scripts");
+    fn packs_weigh_what_their_files_do() {
+        // The detector belongs to the built-in set only, so the optional pack can be
+        // deleted without taking it away.
+        assert_eq!(size(Pack::BuiltIn), 4_826_518 + 8_069_614 + 2_616 + 8_076_390 + 2_781);
+        assert_eq!(size(Pack::Extra), 7_836_326 + 1_103 + 8_026_538 + 2_369 + 13_446_374 + 47_451 + 16_562_373 + 74_012);
+        assert_eq!(files(Pack::Extra).len(), 8);
+        assert_eq!(files(Pack::BuiltIn).len(), 5);
     }
 
     #[test]
-    fn resolves_named_scripts_and_automatic_by_locale() {
-        assert_eq!(resolve_for("eslav", "ru-RU").code, "eslav");
-        assert_eq!(resolve_for(" en ", "ru-RU").code, "en", "a named script beats the locale");
-        assert_eq!(resolve_for("", "ru-RU").code, "eslav");
-        assert_eq!(resolve_for("", "be-BY").code, "eslav");
-        assert_eq!(resolve_for("", "en-US").code, "en");
-        assert_eq!(resolve_for("", "de-DE").code, "en", "no script claims German");
-        assert_eq!(resolve_for("", "zh-CN").code, "en");
-        assert_eq!(resolve_for("nonsense", "ru-RU").code, "eslav", "unknown values fall back like Automatic");
+    fn locales_suggest_their_own_script() {
+        let preferred = |locale: &str| preferred_for(locale).script;
+        assert_eq!(preferred("ru-RU"), Script::Cyrillic);
+        assert_eq!(preferred("uk-UA"), Script::Cyrillic);
+        assert_eq!(preferred("en-US"), Script::Latin);
+        assert_eq!(preferred("de-DE"), Script::Latin);
+        assert_eq!(preferred("el-GR"), Script::Greek);
+        assert_eq!(preferred("ar-EG"), Script::Arabic);
+        assert_eq!(preferred("ko-KR"), Script::Korean);
+        assert_eq!(preferred("zh-CN"), Script::Han);
+        assert_eq!(preferred("ja-JP"), Script::Han);
+        assert_eq!(preferred(""), Script::Latin);
+    }
+
+    #[test]
+    fn reads_the_script_of_a_text() {
+        assert_eq!(script_of("Glance reads any text"), Some(Script::Latin));
+        assert_eq!(script_of("Привет, мир!"), Some(Script::Cyrillic));
+        assert_eq!(script_of("Українська мова"), Some(Script::Cyrillic));
+        assert_eq!(script_of("Καλημέρα"), Some(Script::Greek));
+        assert_eq!(script_of("مرحبا"), Some(Script::Arabic));
+        assert_eq!(script_of("안녕하세요"), Some(Script::Korean));
+        assert_eq!(script_of("你好世界"), Some(Script::Han));
+        assert_eq!(script_of("こんにちは"), Some(Script::Han));
+        // Numbers, spaces and punctuation say nothing about the script.
+        assert_eq!(script_of("12 345 — 6.7!"), None);
+        assert_eq!(script_of(""), None);
+        // The dominant script wins on a mixed line.
+        assert_eq!(script_of("Привет, Glance"), Some(Script::Cyrillic));
+    }
+
+    #[test]
+    fn scripts_have_their_own_recognizer() {
+        let recs: Vec<&Rec> = [Script::Latin, Script::Cyrillic, Script::Greek, Script::Arabic, Script::Korean, Script::Han]
+            .iter()
+            .map(|script| script.rec())
+            .collect();
+        for (script, rec) in [Script::Latin, Script::Cyrillic, Script::Greek, Script::Arabic, Script::Korean, Script::Han]
+            .iter()
+            .zip(&recs)
+        {
+            assert_eq!(rec.script, *script);
+        }
+        assert_eq!(recs.len(), 6, "every script maps to a recognizer");
+        // The packs hold the same recognizers the scripts point at.
+        for (rec, script) in BUILT_IN.iter().chain(EXTRA.iter()).zip(
+            [Script::Latin, Script::Cyrillic, Script::Greek, Script::Arabic, Script::Korean, Script::Han].iter(),
+        ) {
+            assert_eq!(rec.script, *script);
+        }
     }
 
     #[test]
@@ -289,13 +523,14 @@ mod tests {
             url(&DETECTOR),
             "https://github.com/GreatV/oar-ocr/releases/download/v0.3.0/pp-ocrv5_mobile_det.onnx"
         );
+        assert_eq!(url(&LATIN.rec), "https://github.com/GreatV/oar-ocr/releases/download/v0.3.0/latin_pp-ocrv5_mobile_rec.onnx");
     }
 
     #[test]
     #[ignore = "downloads from GitHub; run explicitly with --ignored"]
     fn fetches_a_file_and_verifies_its_hash() {
-        let script = &SCRIPTS[0];
-        let bytes = fetch(&url(&script.dict), &script.dict, 0, script.dict.size, &|_, _| {}).unwrap();
-        assert_eq!(bytes.len() as u64, script.dict.size);
+        let file = &LATIN.dict;
+        let bytes = fetch(&url(file), file, 0, file.size, &|_, _| {}).unwrap();
+        assert_eq!(bytes.len() as u64, file.size);
     }
 }

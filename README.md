@@ -25,9 +25,10 @@ browser engine. Idle in the tray it uses about **2 MB of memory**.
 ## Features
 
 - **Any text on screen**: images, videos, games, remote desktops, PDFs that block copying.
-- **Recognition** with Paddle OCR (offline and free; the Slavic model reads Russian,
-  Ukrainian and Belarusian, and there is an English one — both download once from
-  Settings), or a vision model from Google Gemini, Mistral AI, Groq or Polza AI.
+- **Recognition** with Paddle OCR (offline and free; Latin and Cyrillic come built in and
+  the engine picks the model that reads the crop, with one optional pack for Greek,
+  Arabic, Korean, Chinese and Japanese), or a vision model from Gemini, Mistral, Groq or
+  Polza AI.
 - **One-click translation** with an AI model, Google Translate (no key needed), DeepL or
   Microsoft Translator.
 - **Model picker**: search by name or ID, refresh the list, or use any model ID.
@@ -51,7 +52,8 @@ right-click menu, which also starts a capture and quits the app.
   <img src="docs/settings.png" width="690" alt="Glance settings">
 </p>
 
-Paddle OCR downloads its model files (~12 MB per language) on first use, from
+Paddle OCR downloads its model files (about 20 MB for the built-in Latin and Cyrillic,
+plus an optional ~44 MB pack of the other languages) on first use, from
 Settings → Recognition.
 
 ## API keys

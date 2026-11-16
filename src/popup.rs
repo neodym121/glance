@@ -3,7 +3,7 @@
 //! loses focus.
 
 use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
-use slint::{ComponentHandle, PhysicalPosition};
+use slint::{ComponentHandle, PhysicalPosition, SharedString};
 
 use crate::app::{self, Action};
 use crate::capture::PhysRect;
@@ -21,10 +21,8 @@ pub struct Session {
     anchor: PhysRect,
     work_area: PhysRect,
     scale: f32,
-    engine: String,
     original: String,
     translation: Option<String>,
-    translation_label: String,
     link: Option<String>,
     showing_translation: bool,
     translating: bool,
@@ -33,12 +31,12 @@ pub struct Session {
 impl Session {
     /// Shows the card in its "recognizing" state. Called while the overlay still has
     /// the foreground, so the card can take it over (Esc and click-outside need focus).
-    pub fn open(selection: &Selection, engine: String, translation_label: String) -> Result<Self> {
+    pub fn open(selection: &Selection) -> Result<Self> {
         let window = window_role::create(Role::Popup, ResultPopup::new)?;
         let scale = selection.monitor.scale;
         window.set_popup_width((selection.bounds.width as f32 / scale).clamp(MIN_WIDTH, MAX_WIDTH));
         window.set_state(PopupState::Recognizing);
-        window.set_status(engine.clone().into());
+        window.set_status(SharedString::new());
 
         window.global::<EditKeys>().on_action(|text, ctrl, shift| crate::hotkey::edit_action(&text, ctrl, shift).into());
         window.on_dismiss(|| app::post(Action::PopupClose));
@@ -61,10 +59,8 @@ impl Session {
             anchor: selection.bounds,
             work_area: selection.monitor.work_area,
             scale,
-            engine,
             original: String::new(),
             translation: None,
-            translation_label,
             link: None,
             showing_translation: false,
             translating: false,
@@ -160,7 +156,7 @@ impl Session {
                 self.window.set_state(PopupState::Error);
                 self.window.set_error(error.to_string().into());
                 self.window.set_showing_translation(true);
-                self.window.set_status(self.translation_label.as_str().into());
+                self.window.set_status(SharedString::new());
                 self.window.set_status_ok(false);
                 self.place();
             }
@@ -172,8 +168,7 @@ impl Session {
         self.window.set_text(self.displayed_text().into());
         self.window.set_showing_translation(self.showing_translation);
         self.window.set_status_ok(false);
-        let status = if self.showing_translation { &self.translation_label } else { &self.engine };
-        self.window.set_status(status.as_str().into());
+        self.window.set_status(SharedString::new());
         self.place();
     }
 

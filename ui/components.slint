@@ -688,6 +688,33 @@ export component SectionTitle inherits Text {
     font-weight: Theme.weight-semibold;
 }
 
+// The thin bar that stands in for the Download button while files arrive.
+export component DownloadBar inherits HorizontalLayout {
+    in property <float> progress: 0;
+    spacing: 10px;
+
+    Rectangle {
+        width: 120px;
+        height: 6px;
+        border-radius: 3px;
+        background: Theme.raised;
+
+        Rectangle {
+            x: 0;
+            width: parent.width * min(1.0, root.progress);
+            height: parent.height;
+            border-radius: 3px;
+            background: Theme.link;
+        }
+    }
+
+    Text {
+        text: @tr("Downloading…");
+        color: Theme.text-muted;
+        vertical-alignment: center;
+    }
+}
+
 // Title and description on the left, the control on the right.
 export component SettingsRow {
     in property <string> title;
