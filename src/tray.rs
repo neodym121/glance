@@ -37,9 +37,10 @@ impl Tray {
             .map_err(|e| Error::new(format!("Could not create the tray icon: {e}")))?;
 
         // Handlers run inside the tray window procedure; defer the work to the event loop.
+        // A left click opens the window; the menu stays on the right button.
         TrayIconEvent::set_event_handler(Some(|event| {
             if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
-                app::post(Action::Capture);
+                app::post(Action::OpenSettings);
             }
         }));
         MenuEvent::set_event_handler(Some(|event: MenuEvent| match event.id.0.as_str() {

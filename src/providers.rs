@@ -1,7 +1,7 @@
 //! The cloud services Glance can talk to, and where their API keys live.
 //!
 //! The order of the `ALL` lists is the order of the pickers in Settings; the AI
-//! providers come first in both pickers, in the same order (see ui/settings.slint).
+//! providers come in the same order in both (see ui/settings.slint).
 
 use serde::{Deserialize, Serialize};
 
@@ -21,8 +21,8 @@ impl AiProvider {
 
     pub fn name(self) -> &'static str {
         match self {
-            Self::Gemini => "Google Gemini",
-            Self::Mistral => "Mistral AI",
+            Self::Gemini => "Gemini",
+            Self::Mistral => "Mistral",
             Self::Groq => "Groq",
             Self::Polza => "Polza AI",
         }
@@ -100,7 +100,7 @@ pub enum OcrProvider {
 }
 
 impl OcrProvider {
-    pub const ALL: [Self; 5] = [Self::Gemini, Self::Mistral, Self::Groq, Self::Polza, Self::Paddle];
+    pub const ALL: [Self; 5] = [Self::Paddle, Self::Gemini, Self::Mistral, Self::Groq, Self::Polza];
 
     pub fn ai(self) -> Option<AiProvider> {
         match self {
@@ -202,8 +202,8 @@ impl Secret {
 
     pub fn name(self) -> &'static str {
         match self {
-            Self::Gemini => "Google Gemini",
-            Self::Mistral => "Mistral AI",
+            Self::Gemini => "Gemini",
+            Self::Mistral => "Mistral",
             Self::Groq => "Groq",
             Self::Polza => "Polza AI",
             Self::Google => "Google Cloud Translation",
@@ -245,9 +245,11 @@ mod tests {
     }
 
     #[test]
-    fn pickers_list_ai_providers_first_in_the_same_order() {
+    fn pickers_list_ai_providers_in_the_same_order() {
+        // Paddle leads the recognition picker, so its AI providers start at 1.
+        assert_eq!(OcrProvider::ALL[0], OcrProvider::Paddle);
         for (i, ai) in AiProvider::ALL.iter().enumerate() {
-            assert_eq!(OcrProvider::ALL[i].ai(), Some(*ai));
+            assert_eq!(OcrProvider::ALL[i + 1].ai(), Some(*ai));
             assert_eq!(TranslationProvider::ALL[i].ai(), Some(*ai));
         }
         assert_eq!(OcrProvider::default(), OcrProvider::Paddle);

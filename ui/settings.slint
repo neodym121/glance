@@ -438,10 +438,10 @@ export component SettingsWindow inherits Window {
     callback hotkey-recording(bool);
     pure callback capture-hotkey(string, bool, bool, bool, bool, bool) -> HotkeyCapture;
 
-    // Pickers list the AI providers first, in the same order in both:
+    // Pickers list the AI providers in the same order in both:
     // 0 Gemini, 1 Mistral, 2 Groq, 3 Polza AI (src/providers.rs).
 
-    // Recognition: 0-3 AI providers, 4 Paddle OCR
+    // Recognition: 0 Paddle OCR, 1-4 AI providers
     in property <[string]> ocr-providers;
     in-out property <int> ocr-provider;
     // Paddle OCR: the script picker and the state of its model files.
@@ -509,7 +509,7 @@ export component SettingsWindow inherits Window {
         root.models-context();
     }
 
-    title: @tr("Glance Settings");
+    title: @tr("Glance");
     no-frame: true;
     resize-border-width: 6px;
     preferred-width: 920px;
@@ -546,14 +546,16 @@ export component SettingsWindow inherits Window {
                     Icon {
                         source: @image-url("icons/scan-text.svg");
                         tint: Theme.brand;
+                        width: 22px;
+                        height: 22px;
                     }
                 }
 
                 Text {
                     horizontal-stretch: 1;
-                    text: @tr("Glance Settings");
+                    text: @tr("Glance");
                     color: Theme.text;
-                    font-size: Theme.text-body;
+                    font-size: Theme.text-title;
                     font-weight: Theme.weight-semibold;
                     vertical-alignment: center;
                 }
@@ -754,7 +756,7 @@ export component SettingsWindow inherits Window {
                             Card {
                                 SettingsRow {
                                     title: @tr("Engine");
-                                    description: root.ocr-provider == 4
+                                    description: root.ocr-provider == 0
                                         ? @tr("Paddle OCR runs on this PC. Nothing leaves your computer; its model files are downloaded once, from the card below.")
                                         : @tr("A vision model reads the image. The selected area is sent to the provider.");
 
@@ -766,7 +768,7 @@ export component SettingsWindow inherits Window {
                                 }
                             }
 
-                            if root.ocr-provider == 4: VerticalLayout {
+                            if root.ocr-provider == 0: VerticalLayout {
                                 spacing: 12px;
 
                                 Card {
@@ -836,30 +838,26 @@ export component SettingsWindow inherits Window {
                                 }
                             }
 
-                            if root.ocr-provider == 0: ModelCard {
+                            if root.ocr-provider == 1: ModelCard {
                                 model <=> root.ocr-model-gemini;
                                 default-model: root.ocr-default-gemini;
                             }
 
-                            if root.ocr-provider == 1: ModelCard {
+                            if root.ocr-provider == 2: ModelCard {
                                 model <=> root.ocr-model-mistral;
                                 default-model: root.ocr-default-mistral;
                             }
 
-                            if root.ocr-provider == 2: ModelCard {
+                            if root.ocr-provider == 3: ModelCard {
                                 model <=> root.ocr-model-groq;
                                 default-model: root.ocr-default-groq;
                             }
 
-                            if root.ocr-provider == 3: ModelCard {
+                            if root.ocr-provider == 4: ModelCard {
                                 model <=> root.ocr-model-polza;
                                 default-model: root.ocr-default-polza;
                                 has-route: true;
                                 route <=> root.ocr-route-polza;
-                            }
-
-                            if root.ocr-provider < 4: Note {
-                                text: @tr("Only models that accept images are listed when the provider says which ones do.");
                             }
                         }
 
@@ -963,12 +961,12 @@ export component SettingsWindow inherits Window {
                                 spacing: 8px;
 
                                 KeyCard {
-                                    provider: "Google Gemini";
+                                    provider: "Gemini";
                                     value <=> root.key-gemini;
                                 }
 
                                 KeyCard {
-                                    provider: "Mistral AI";
+                                    provider: "Mistral";
                                     value <=> root.key-mistral;
                                 }
 
@@ -996,10 +994,6 @@ export component SettingsWindow inherits Window {
                                     provider: "Microsoft Translator";
                                     value <=> root.key-microsoft;
                                 }
-                            }
-
-                            Note {
-                                text: @tr("Keys are kept in Windows Credential Manager, never in the settings file. Clearing a field removes its key.");
                             }
                         }
 

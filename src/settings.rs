@@ -401,7 +401,7 @@ impl Settings {
         };
         let query = list.get_query();
         let known = self.catalog.get(&provider);
-        let found = known.map(|all| models::search(all, &query, purpose)).unwrap_or_default();
+        let found = known.map(|all| models::search(all, &query)).unwrap_or_default();
         let mut items: Vec<ModelItem> = found
             .iter()
             .map(|m| ModelItem { id: m.id.as_str().into(), name: m.name.as_str().into(), custom: false })
@@ -497,6 +497,8 @@ impl Settings {
     }
 
     pub fn bring_to_front(&self) {
+        // A minimized window stays minimized unless it is restored first.
+        self.window.window().set_minimized(false);
         let _ = self.window.show();
         win32::bring_to_front(self.window.window());
     }

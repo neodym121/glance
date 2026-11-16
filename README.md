@@ -10,11 +10,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0-51a2ff?style=flat-square" alt="Version 1.0.0">
+  <img src="https://img.shields.io/badge/version-1.0.1-51a2ff?style=flat-square" alt="Version 1.0.1">
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4?style=flat-square" alt="Windows 10 and 11">
-  <img src="https://img.shields.io/badge/Rust-2026-dea584?style=flat-square&logo=rust&logoColor=white" alt="Rust 2026">
-  <img src="https://img.shields.io/badge/UI-Slint-2379f4?style=flat-square" alt="Slint UI">
-  <a href="https://github.com/neodym121/glance/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/neodym121/glance/build.yml?style=flat-square&label=build" alt="Build status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/neodym121/glance?style=flat-square" alt="MIT license"></a>
 </p>
 
@@ -43,11 +40,12 @@ or the portable `.exe`. Needs 64-bit Windows 10 or 11.
 
 ## Using it
 
-1. Press **Ctrl+Alt+S** (or click the tray icon) and drag over the text. **Esc** cancels.
+1. Press **Ctrl+Alt+S** and drag over the text. **Esc** cancels.
 2. The recognized text appears in a card and is copied to the clipboard.
 3. **Translate** shows the translation, **Open** opens a link found in the text.
 
-Settings open on the first launch, later from the tray menu.
+Settings open on the first launch, later with a left click on the tray icon or from its
+right-click menu, which also starts a capture and quits the app.
 
 <p align="center">
   <img src="docs/settings.png" width="690" alt="Glance settings">

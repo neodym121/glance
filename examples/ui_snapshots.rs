@@ -119,13 +119,13 @@ fn main() {
         settings.set_page(page);
         settings.set_hotkey("Ctrl+Alt+S".into());
         settings.set_auto_copy(true);
-        settings.set_ocr_providers(strings(&["Google Gemini", "Mistral AI", "Groq", "Polza AI", "Paddle OCR"]));
-        settings.set_ocr_provider(if page == 1 { 3 } else { 0 });
+        settings.set_ocr_providers(strings(&["Paddle OCR", "Gemini", "Mistral", "Groq", "Polza AI"]));
+        settings.set_ocr_provider(if page == 1 { 4 } else { 0 });
         settings.set_ocr_default_polza("google/gemini-3.1-flash-lite".into());
         settings.set_ocr_route_polza("google-vertex/global".into());
         settings.set_key_gemini("AIza-0000000000".into());
         settings.set_translation_providers(strings(&[
-            "Google Gemini", "Mistral AI", "Groq", "Polza AI", "Google Translate", "DeepL", "Microsoft Translator",
+            "Gemini", "Mistral", "Groq", "Polza AI", "Google Translate", "DeepL", "Microsoft Translator",
         ]));
         settings.set_translation_provider(if page == 2 { 0 } else { 6 });
         settings.set_target_languages(strings(&["English", "German", "Russian"]));
@@ -151,8 +151,8 @@ fn main() {
         let settings = SettingsWindow::new().unwrap();
         let window = last_window();
         settings.set_page(1);
-        settings.set_ocr_providers(strings(&["Google Gemini", "Mistral AI", "Groq", "Polza AI", "Paddle OCR"]));
-        settings.set_ocr_provider(4);
+        settings.set_ocr_providers(strings(&["Paddle OCR", "Gemini", "Mistral", "Groq", "Polza AI"]));
+        settings.set_ocr_provider(0);
         settings.set_paddle_languages(strings(&["Automatic", "Slavic", "English"]));
         settings.set_paddle_language_index(1);
         settings.set_paddle_ready(ready);

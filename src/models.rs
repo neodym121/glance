@@ -17,9 +17,6 @@ pub struct ModelInfo {
     pub id: String,
     /// Display name; the id when the provider has none.
     pub name: String,
-    /// Whether the model reads images; `None` when the provider doesn't say.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub vision: Option<bool>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -100,7 +97,7 @@ fn parse(provider: AiProvider, response: &Value) -> Vec<ModelInfo> {
                         return None;
                     }
                     let id = text(entry, "id");
-                    ModelInfo { name: id.clone(), id, vision: flag("vision") }
+                    ModelInfo { name: id.clone(), id }
                 }
                 AiProvider::Groq => {
                     let id = text(entry, "id");
@@ -109,7 +106,7 @@ fn parse(provider: AiProvider, response: &Value) -> Vec<ModelInfo> {
                     if skip || entry.get("active").and_then(Value::as_bool) == Some(false) {
                         return None;
                     }
-                    ModelInfo { name: id.clone(), id, vision: None }
+                    ModelInfo { name: id.clone(), id }
                 }
                 AiProvider::Polza => routed_model(entry, &text)?,
             };
@@ -132,7 +129,7 @@ fn gemini_model(entry: &Value, text: &impl Fn(&Value, &str) -> String) -> Option
     let full = text(entry, "name");
     let id = full.strip_prefix("models/").unwrap_or(&full).to_owned();
     let name = Some(text(entry, "displayName")).filter(|n| !n.is_empty()).unwrap_or_else(|| id.clone());
-    Some(ModelInfo { id, name, vision: None })
+    Some(ModelInfo { id, name })
 }
 
 /// Polza AI describes modalities; it also lists image, speech and embedding
@@ -152,17 +149,14 @@ fn routed_model(entry: &Value, text: &impl Fn(&Value, &str) -> String) -> Option
     }
     let id = text(entry, "id");
     let name = Some(text(entry, "name")).filter(|n| !n.is_empty()).unwrap_or_else(|| id.clone());
-    let vision = modalities("input_modalities").map(|input| input.iter().any(|m| m == "image"));
-    Some(ModelInfo { id, name, vision })
+    Some(ModelInfo { id, name })
 }
 
-/// Models matching every word of `query` in their name or id. Recognition leaves out
-/// models known not to read images.
-pub fn search<'a>(models: &'a [ModelInfo], query: &str, purpose: Purpose) -> Vec<&'a ModelInfo> {
+/// Models matching every word of `query` in their name or id.
+pub fn search<'a>(models: &'a [ModelInfo], query: &str) -> Vec<&'a ModelInfo> {
     let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
     models
         .iter()
-        .filter(|m| purpose == Purpose::Translation || m.vision != Some(false))
         .filter(|m| {
             let (name, id) = (m.name.to_lowercase(), m.id.to_lowercase());
             words.iter().all(|w| name.contains(w.as_str()) || id.contains(w.as_str()))
@@ -188,8 +182,6 @@ mod tests {
         ]});
         let models = parse(AiProvider::Polza, &response);
         assert_eq!(models.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(), ["a/text", "z/vision"]);
-        assert_eq!(models[0].vision, Some(false));
-        assert_eq!(models[1].vision, Some(true));
     }
 
     #[test]
@@ -209,7 +201,7 @@ mod tests {
         ]});
         let models = parse(AiProvider::Mistral, &mistral);
         assert_eq!(models.len(), 1);
-        assert_eq!(models[0].vision, Some(true));
+        assert_eq!(models[0].id, "mistral-small-latest");
 
         let groq = json!({ "data": [
             { "id": "llama-3.3-70b-versatile", "active": true },
@@ -223,14 +215,14 @@ mod tests {
     #[test]
     fn searches_names_and_ids() {
         let models = vec![
-            ModelInfo { id: "anthropic/claude-haiku-5.5".into(), name: "Anthropic: Claude Haiku 5.5".into(), vision: Some(true) },
-            ModelInfo { id: "openai/gpt-oss-20b".into(), name: "GPT OSS 20B".into(), vision: Some(false) },
+            ModelInfo { id: "anthropic/claude-haiku-5.5".into(), name: "Anthropic: Claude Haiku 5.5".into() },
+            ModelInfo { id: "openai/gpt-oss-20b".into(), name: "GPT OSS 20B".into() },
         ];
         let ids = |found: Vec<&ModelInfo>| found.iter().map(|m| m.id.clone()).collect::<Vec<_>>();
-        assert_eq!(ids(search(&models, "claude 5.5", Purpose::Translation)), ["anthropic/claude-haiku-5.5"]);
-        assert_eq!(ids(search(&models, "OSS-20", Purpose::Translation)), ["openai/gpt-oss-20b"]);
-        assert_eq!(search(&models, "", Purpose::Translation).len(), 2);
-        // Text-only models are not offered for recognition.
-        assert_eq!(ids(search(&models, "", Purpose::Recognition)), ["anthropic/claude-haiku-5.5"]);
+        assert_eq!(ids(search(&models, "claude 5.5")), ["anthropic/claude-haiku-5.5"]);
+        assert_eq!(ids(search(&models, "OSS-20")), ["openai/gpt-oss-20b"]);
+        assert_eq!(search(&models, "").len(), 2);
+        // Every model is offered, whatever it reads.
+        assert_eq!(ids(search(&models, "gpt")), ["openai/gpt-oss-20b"]);
     }
 }

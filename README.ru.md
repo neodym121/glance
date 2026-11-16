@@ -10,11 +10,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0-51a2ff?style=flat-square" alt="Версия 1.0.0">
+  <img src="https://img.shields.io/badge/version-1.0.1-51a2ff?style=flat-square" alt="Версия 1.0.1">
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4?style=flat-square" alt="Windows 10 и 11">
-  <img src="https://img.shields.io/badge/Rust-2026-dea584?style=flat-square&logo=rust&logoColor=white" alt="Rust 2026">
-  <img src="https://img.shields.io/badge/UI-Slint-2379f4?style=flat-square" alt="Интерфейс на Slint">
-  <a href="https://github.com/neodym121/glance/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/neodym121/glance/build.yml?style=flat-square&label=build" alt="Статус сборки"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/neodym121/glance?style=flat-square" alt="Лицензия MIT"></a>
 </p>
 
@@ -44,11 +41,12 @@ WebView, Electron и браузерных движков. В трее заним
 
 ## Как пользоваться
 
-1. Нажми **Ctrl+Alt+S** (или щёлкни по значку в трее) и выдели текст. **Esc** — отмена.
+1. Нажми **Ctrl+Alt+S** и выдели текст. **Esc** — отмена.
 2. Распознанный текст появится в карточке и скопируется в буфер обмена.
 3. **Translate** показывает перевод, **Open** открывает ссылку из текста.
 
-Настройки открываются при первом запуске, потом — из меню в трее.
+Настройки открываются при первом запуске, потом — по ЛКМ по значку в трее или из его
+меню по ПКМ, где также можно начать захват и закрыть приложение.
 
 <p align="center">
   <img src="docs/settings.png" width="690" alt="Настройки Glance">
