@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.1-51a2ff?style=flat-square" alt="Версия 1.0.1">
+  <img src="https://img.shields.io/badge/version-1.0.2-51a2ff?style=flat-square" alt="Версия 1.0.2">
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4?style=flat-square" alt="Windows 10 и 11">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/neodym121/glance?style=flat-square" alt="Лицензия MIT"></a>
 </p>

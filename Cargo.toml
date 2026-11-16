@@ -1,6 +1,6 @@
 [package]
 name = "glance"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2024"
 description = "Screen OCR and translation from the Windows system tray"
 license = "MIT"
