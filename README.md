@@ -13,6 +13,7 @@
   <img src="https://img.shields.io/badge/version-1.0.2-51a2ff?style=flat-square" alt="Version 1.0.2">
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4?style=flat-square" alt="Windows 10 and 11">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/neodym121/glance?style=flat-square" alt="MIT license"></a>
+  <a href="https://slint.dev"><img src="https://img.shields.io/badge/Slint-2379f4?style=flat-square" alt="Slint"></a>
 </p>
 
 <p align="center">
@@ -84,11 +85,3 @@ The installer is built by the [Build workflow](.github/workflows/build.yml) with
 ## License
 
 [MIT](LICENSE). Icons: [Lucide](https://lucide.dev) (ISC license).
-
----
-
-<p align="center">
-  <a href="https://slint.dev"><img src="ui/images/slint-logo-gray.png" height="32" alt="Slint"></a>
-  <br>
-  <sub>Glance is built with Slint. It works on your machine.</sub>
-</p>

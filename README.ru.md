@@ -13,6 +13,7 @@
   <img src="https://img.shields.io/badge/version-1.0.2-51a2ff?style=flat-square" alt="Версия 1.0.2">
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4?style=flat-square" alt="Windows 10 и 11">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/neodym121/glance?style=flat-square" alt="Лицензия MIT"></a>
+  <a href="https://slint.dev"><img src="https://img.shields.io/badge/Slint-2379f4?style=flat-square" alt="Slint"></a>
 </p>
 
 <p align="center">
@@ -85,11 +86,3 @@ cargo build --release
 ## Лицензия
 
 [MIT](LICENSE). Иконки: [Lucide](https://lucide.dev) (лицензия ISC).
-
----
-
-<p align="center">
-  <a href="https://slint.dev"><img src="ui/images/slint-logo-gray.png" height="32" alt="Slint"></a>
-  <br>
-  <sub>Glance сделан на Slint. Работает на вашей машине.</sub>
-</p>
